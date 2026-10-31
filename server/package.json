@@ -1,0 +1,22 @@
+{
+  "name": "hostcaster-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test --test-reporter=spec \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/static": "^10.1.8",
+    "fastify": "^5.12.7",
+    "imapflow": "^2.10.0",
+    "music-metadata": "^12.3.2",
+    "nodemailer": "^10.3.1"
+  }
+}

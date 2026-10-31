@@ -1,0 +1,421 @@
+/* Music services: settings cards + browse screens (owner: services builder). Tokens only, no purple. */
+
+/* ---- service tile ------------------------------------------------------------------------------------------------ */
+.aw-svc-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 12px;
+  color: #fff;
+  box-shadow: var(--inner-line);
+}
+.aw-svc-tile svg {
+  width: 52%;
+  height: 52%;
+  stroke-width: 1.9;
+}
+.aw-svc-tile--graphite {
+  background: linear-gradient(145deg, #52525b, #27272a);
+}
+.aw-svc-tile--signal {
+  background: linear-gradient(145deg, #ff7a4d, #e8461f);
+}
+.aw-svc-tile--red {
+  background: linear-gradient(145deg, #ff3b3b, #c4161c);
+}
+.aw-svc-tile--green {
+  background: linear-gradient(145deg, #2fd16b, #149845);
+}
+.aw-svc-tile--neutral {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* ---- settings cards ---------------------------------------------------------------------------------------------- */
+.aw-svc-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.aw-svc-intro {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-1);
+}
+.aw-svc-card {
+  /* one step above the card in every region (desktop panel cards are surface-2) */
+  --field: var(--card-hover);
+  --chip-bg: var(--card-hover);
+  display: grid;
+  /* minmax(0, 1fr): long one-line subtitles (ellipsis) must not widen the card past a phone screen */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.aw-svc-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.aw-svc-card__titles {
+  flex: 1;
+  min-width: 0;
+}
+.aw-svc-card__title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+.aw-svc-card__status {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  overflow: hidden;
+  /* up to two lines (server lists and account names wrap on phones) */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.aw-svc-card__desc {
+  color: var(--text-2);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+.aw-svc-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.aw-svc-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--chip-bg, var(--surface-2));
+  color: var(--text-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+.aw-svc-cap svg {
+  width: 13px;
+  height: 13px;
+  color: var(--ok);
+}
+.aw-svc-cap--no svg {
+  color: var(--text-3);
+}
+.aw-svc-note {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--chip-bg, var(--surface-2));
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.aw-svc-note svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--accent-2);
+}
+.aw-svc-note--plain svg {
+  color: var(--text-3);
+}
+.aw-svc-note b {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+}
+.aw-svc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.aw-svc-form {
+  display: grid;
+  gap: var(--space-3);
+}
+.aw-svc-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+.aw-svc-copy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 8px 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text);
+  min-width: 0;
+}
+.aw-svc-copy code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aw-svc-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.aw-svc-steps a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.aw-svc-apps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (min-width: 640px) {
+  .aw-svc-form__row--2 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* ---- browse screens ---------------------------------------------------------------------------------------------- */
+.aw-svc-browse {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+}
+.aw-svc-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+.aw-svc-toolbar__row {
+  display: flex;
+  gap: var(--space-2);
+  /* a field with a label + a button next to its input */
+  align-items: flex-end;
+}
+.aw-svc-toolbar__row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.aw-svc-toolbar__row > button {
+  flex: none;
+  margin-bottom: 2px;
+}
+.aw-svc-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 calc(-1 * var(--space-1));
+  padding: 2px var(--space-1);
+}
+.aw-svc-chips::-webkit-scrollbar {
+  display: none;
+}
+.aw-svc-chips > * {
+  flex: none;
+}
+.aw-svc-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.aw-svc-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.aw-svc-section__title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+.aw-svc-section__meta {
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+.aw-svc-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.aw-svc-hero__text {
+  min-width: 0;
+  flex: 1;
+}
+.aw-svc-hero__kicker {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.aw-svc-hero__title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aw-svc-hero__meta {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+/* rows */
+.aw-svc-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+.aw-svc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-sm);
+  padding-right: 8px;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+@media (hover: hover) {
+  .aw-svc-row:hover {
+    background: var(--hover);
+  }
+}
+.aw-svc-row.is-current .aw-svc-row__title {
+  color: var(--accent);
+}
+.aw-svc-row.is-dim {
+  opacity: 0.55;
+}
+.aw-svc-row__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  min-height: 60px;
+  padding: 6px 4px 6px 8px;
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+.aw-svc-row__art {
+  flex: none;
+  display: grid;
+}
+.aw-svc-row__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.aw-svc-row__title {
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aw-svc-row__sub {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aw-svc-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.aw-svc-art {
+  --s: 48px;
+  display: grid;
+  place-items: center;
+  width: var(--s);
+  height: var(--s);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-3);
+  color: var(--text-3);
+  box-shadow: var(--inner-line);
+}
+.aw-svc-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.aw-svc-art svg {
+  width: 42%;
+  height: 42%;
+  stroke-width: 1.6;
+}
+.aw-svc-art--round {
+  border-radius: 50%;
+}
+.aw-svc-art--wide {
+  width: calc(var(--s) * 16 / 9);
+}
+
+/* hide secondary row buttons on small phones; the row menu still has them */
+@media (max-width: 420px) {
+  .aw-svc-row__actions .aw-svc-hide-sm {
+    display: none;
+  }
+}
+
+/* ---- video slot (Now Playing) ------------------------------------------------------------------------------------ */
+.aw-yt-slot {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: var(--shadow-3);
+}
+.aw-yt-slot__bg {
+  position: absolute;
+  inset: -12%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(28px) saturate(1.1) brightness(0.55);
+  transform: scale(1.1);
+}
+.aw-yt-slot__badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 1;
+}
+
+/* ---- callback ---------------------------------------------------------------------------------------------------- */
+.aw-svc-callback {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+}
+
+.aw-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.aw-svc-list.is-busy {
+  opacity: 0.55;
+  transition: opacity var(--dur) var(--ease);
+}

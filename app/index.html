@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0b" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="description" content="Your personal AI radio station." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Host-Caster</title>
+    <script>
+      // Apply the last known theme before first paint (the real value lives in IndexedDB settings).
+      (function () {
+        try {
+          // once: the key from before the rename to Host-Caster (the database moves in core/db/legacy.ts)
+          var legacy = localStorage.getItem('airwave.theme');
+          if (legacy !== null) {
+            if (localStorage.getItem('hostcaster.theme') === null) localStorage.setItem('hostcaster.theme', legacy);
+            localStorage.removeItem('airwave.theme');
+          }
+          var pref = localStorage.getItem('hostcaster.theme') || 'dark';
+          var light = pref === 'light' || (pref === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
+          document.documentElement.dataset.theme = light ? 'light' : 'dark';
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      html[data-theme='dark'] { background: #0a0a0b; }
+      html[data-theme='light'] { background: #f3f3f4; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,153 @@
+.aw-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-min, 200px), 1fr));
+  gap: var(--space-4);
+}
+
+.aw-grid--hosts {
+  --grid-min: 220px;
+}
+
+.aw-grid--stations {
+  --grid-min: 260px;
+}
+
+@media (max-width: 899px) {
+  .aw-grid {
+    gap: var(--space-3);
+  }
+
+  .aw-grid--hosts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .aw-grid--stations {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* host card */
+.aw-hostcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  height: 100%;
+}
+
+.aw-hostcard__name {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.015em;
+}
+
+.aw-hostcard__tagline {
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.aw-hostcard__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: auto;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.aw-meter {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.aw-meter > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+
+.aw-meter > i.on {
+  background: var(--accent-2);
+}
+
+.aw-newcard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 100%;
+  color: var(--text-2);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  border-radius: var(--radius-md);
+}
+
+@media (hover: hover) {
+  .aw-newcard:hover {
+    color: var(--text);
+    background: var(--hover);
+  }
+}
+
+.aw-newcard__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--text);
+}
+
+.aw-newcard__title {
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+}
+
+.aw-newcard__desc {
+  font-size: var(--text-sm);
+}
+
+/* station card */
+.aw-stationcard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.aw-stationcard__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.aw-stationcard__name {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.aw-stationcard__desc {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+.aw-stationcard__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+/* on a phone the badge drops under "Talks every 2 songs" instead of squeezing it into three lines */
+.aw-stationcard__foot > span {
+  white-space: nowrap;
+}

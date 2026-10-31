@@ -1,0 +1,260 @@
+.aw-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  grid-template-areas:
+    'art head'
+    'art details';
+  column-gap: var(--space-7);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--c) 16%, transparent), transparent 55%),
+    var(--card);
+  box-shadow: var(--inner-line);
+}
+
+.aw-hero__art {
+  grid-area: art;
+  align-self: center;
+  box-shadow: var(--shadow-3);
+  border-radius: 18px;
+}
+
+.aw-hero__head {
+  grid-area: head;
+  align-self: end;
+  min-width: 0;
+}
+
+.aw-hero__details {
+  grid-area: details;
+  align-self: start;
+  min-width: 0;
+}
+
+.aw-hero__badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.aw-hero__name {
+  font-size: clamp(1.75rem, 3.2vw, 2.5rem);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.aw-hero__desc {
+  margin-top: var(--space-2);
+  color: var(--text-2);
+  max-width: 52ch;
+}
+
+.aw-hero__hosts {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  --stack-ring: var(--card);
+}
+
+.aw-hero__hosts strong {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+}
+
+.aw-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.aw-home__section {
+  margin-top: var(--space-8);
+}
+
+.aw-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.aw-hostrow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.aw-hostpill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  padding-right: var(--space-4);
+}
+
+.aw-hostpill__text {
+  min-width: 0;
+}
+
+.aw-hostpill__name {
+  font-weight: var(--weight-semibold);
+}
+
+.aw-hostpill__tagline {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+@media (max-width: 899px) {
+  .aw-hero {
+    grid-template-columns: 84px minmax(0, 1fr);
+    grid-template-areas:
+      'art head'
+      'details details';
+    column-gap: var(--space-4);
+    row-gap: var(--space-4);
+    padding: var(--space-4);
+    border-radius: 20px;
+  }
+
+  .aw-hero__art {
+    border-radius: 14px;
+    box-shadow: var(--shadow-2);
+  }
+
+  .aw-hero__head {
+    align-self: center;
+  }
+
+  .aw-hero__badges {
+    margin-bottom: var(--space-2);
+  }
+
+  .aw-hero__name {
+    font-size: 1.5rem;
+  }
+
+  .aw-hero__desc {
+    margin-top: 0;
+  }
+
+  .aw-hero__actions {
+    margin-top: var(--space-5);
+  }
+
+  .aw-hero__actions .aw-btn--primary {
+    flex: 1 1 100%;
+  }
+
+  /* second row: Talk to the hosts takes the room, the icon buttons keep theirs (fits 360 px) */
+  .aw-hero__actions .aw-btn:not(.aw-btn--primary) {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .aw-hero__actions .aw-iconbtn {
+    flex: none;
+  }
+
+  .aw-home__section {
+    margin-top: var(--space-7);
+  }
+
+  .aw-hostrow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+}
+
+.aw-hero__caption {
+  margin-top: var(--space-3);
+  max-width: 60ch;
+  color: var(--text);
+  font-size: var(--text-md, 1rem);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.aw-hostpill > .aw-badge {
+  margin-left: auto;
+  flex: none;
+}
+
+.aw-hostpill__text {
+  flex: 1;
+}
+
+.aw-home__lib {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.aw-home__lib svg {
+  width: 28px;
+  height: 28px;
+  color: var(--text-2);
+}
+
+.aw-home__lib span {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.aw-home__lib strong {
+  color: var(--text);
+}
+
+.aw-hero__notice {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin-top: var(--space-3);
+  max-width: 64ch;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.aw-hero__notice svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--accent-2);
+}
+
+@media (max-width: 899px) {
+  .aw-hero__actions .aw-btn__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.aw-hero__short {
+  display: none;
+}
+
+@media (max-width: 419px) {
+  .aw-hero__long {
+    display: none;
+  }
+
+  .aw-hero__short {
+    display: inline;
+  }
+}

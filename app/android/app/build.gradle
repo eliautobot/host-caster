@@ -1,0 +1,106 @@
+apply plugin: 'com.android.application'
+
+import groovy.json.JsonSlurper
+
+// Version: versionName = app/package.json "version"; versionCode = MAJOR*1000000 + MINOR*10000 + PATCH*100 + BUILD,
+// BUILD 0..99 from -PhostcasterBuild=N or HOSTCASTER_BUILD (a second upload of the same version). 1.2.3 build 4 = 1020304.
+def appVersion = new JsonSlurper().parse(file('../../package.json')).version as String
+def versionParts = appVersion.tokenize('.-+')
+def versionBuild = ((project.findProperty('hostcasterBuild') ?: System.getenv('HOSTCASTER_BUILD') ?: '0') as String).toInteger()
+if (versionBuild < 0 || versionBuild > 99) throw new GradleException("hostcasterBuild must be 0..99, got ${versionBuild}")
+def appVersionCode = versionParts[0].toInteger() * 1000000 + versionParts[1].toInteger() * 10000 + versionParts[2].toInteger() * 100 + versionBuild
+
+// Release signing: the keys stay outside the repo. A Play build is signed with the upload key: a properties file with
+// storeFile, storePassword, keyAlias, keyPassword at -PhostcasterKeystore=path, HOSTCASTER_KEYSTORE_PROPERTIES or
+// ~/.config/hostcaster/play/keystore.properties. Without it a Play release build is left unsigned.
+//
+// Distribution: -PhostcasterDistribution=play (default) or direct (HOSTCASTER_DISTRIBUTION). Same code and versionCode
+// scheme for both. A direct build (the APK on the website) is signed with the APP SIGNING key instead: the same key
+// that is enrolled as the Play App Signing key, so Google Play can update a downloaded install. Its properties file:
+// -PhostcasterAppSigning=path, HOSTCASTER_APP_SIGNING_PROPERTIES or ~/.config/hostcaster/play/app-signing.properties.
+// A direct build without that key fails rather than ship an APK nobody could update.
+def distribution = (project.findProperty('hostcasterDistribution') ?: System.getenv('HOSTCASTER_DISTRIBUTION') ?: 'play') as String
+if (!(distribution in ['play', 'direct'])) throw new GradleException("hostcasterDistribution must be play or direct, got ${distribution}")
+def keystorePath = distribution == 'direct'
+    ? (project.findProperty('hostcasterAppSigning') ?: System.getenv('HOSTCASTER_APP_SIGNING_PROPERTIES') ?: "${System.getProperty('user.home')}/.config/hostcaster/play/app-signing.properties")
+    : (project.findProperty('hostcasterKeystore') ?: System.getenv('HOSTCASTER_KEYSTORE_PROPERTIES') ?: "${System.getProperty('user.home')}/.config/hostcaster/play/keystore.properties")
+def keystoreProps = new Properties()
+def keystoreFile = file(keystorePath)
+if (keystoreFile.isFile()) keystoreFile.withInputStream { keystoreProps.load(it) }
+def releaseTaskRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
+if (distribution == 'direct' && releaseTaskRequested && !keystoreProps.getProperty('storeFile')) {
+    throw new GradleException("A direct build needs the app signing key properties file (not found at ${keystorePath})")
+}
+
+android {
+    namespace = "com.hostcaster.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.hostcaster.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appVersionCode
+        versionName appVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (keystoreProps.getProperty('storeFile')) {
+            release {
+                storeFile file(keystoreProps.getProperty('storeFile'))
+                storePassword keystoreProps.getProperty('storePassword')
+                keyAlias keystoreProps.getProperty('keyAlias')
+                keyPassword keystoreProps.getProperty('keyPassword')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            // R8 shrinks and obfuscates; Capacitor's consumer rules keep the plugins (see proguard-rules.pro)
+            minifyEnabled true
+            shrinkResources true
+            debuggable false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystoreProps.getProperty('storeFile')) signingConfig signingConfigs.release
+        }
+    }
+    bundle {
+        // one AAB, Play serves each device only its language and screen density
+        language { enableSplit = true }
+        density { enableSplit = true }
+        abi { enableSplit = true }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

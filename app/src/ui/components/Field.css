@@ -1,0 +1,141 @@
+.aw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.aw-field__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-2);
+}
+
+.aw-field__hint {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+.aw-field__error {
+  font-size: var(--text-xs);
+  color: var(--danger);
+}
+
+.aw-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  background: var(--field);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition:
+    box-shadow var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+@media (hover: hover) {
+  .aw-control:hover {
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+}
+
+.aw-control:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--line-strong),
+    0 0 0 3px var(--accent-2-soft);
+}
+
+.aw-control--invalid {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+@media (hover: hover) {
+  .aw-control--invalid:hover {
+    box-shadow: inset 0 0 0 1px var(--danger);
+  }
+}
+
+.aw-control__icon {
+  display: grid;
+  place-items: center;
+  padding-left: 12px;
+  color: var(--text-3);
+  flex: none;
+}
+
+.aw-control__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.aw-control__trailing {
+  display: flex;
+  align-items: center;
+  padding-right: 6px;
+  flex: none;
+}
+
+.aw-input,
+.aw-textarea,
+.aw-select {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font-size: var(--text-md);
+  padding: 0 14px;
+  height: 44px;
+}
+
+.aw-control__icon + .aw-input {
+  padding-left: 10px;
+}
+
+.aw-input::placeholder,
+.aw-textarea::placeholder {
+  color: var(--text-3);
+}
+
+.aw-textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 12px 14px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.aw-textarea--auto {
+  resize: none;
+  overflow: hidden;
+}
+
+.aw-select {
+  appearance: none;
+  padding-right: 40px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.aw-select option {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.aw-control__chevron {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  color: var(--text-3);
+  width: 18px;
+  height: 18px;
+}
+
+.aw-input:focus-visible,
+.aw-textarea:focus-visible,
+.aw-select:focus-visible {
+  outline: none;
+}

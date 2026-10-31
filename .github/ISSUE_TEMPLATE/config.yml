@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://host-caster.com/contact
+    about: Please do not open an issue. Email support@host-caster.com with "Security" in the subject (see SECURITY.md).
+  - name: Help with the hosted version (host-caster.com)
+    url: https://host-caster.com/contact
+    about: Questions about an account, a plan or billing on host-caster.com go to support, not to this repository.

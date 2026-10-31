@@ -1,0 +1,14 @@
+/* Settings > This device (owner: native agent). Builds on the aw-acct- card/row styles. */
+.aw-dev,
+.aw-dev > *,
+.aw-dev .aw-acct-card > * {
+  min-width: 0;
+}
+/* explanations wrap instead of being cut off on phones */
+.aw-dev .aw-acct-row__sub {
+  white-space: normal;
+  text-wrap: pretty;
+}
+.aw-dev .aw-acct-row {
+  padding-block: 12px;
+}

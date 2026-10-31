@@ -1,0 +1,83 @@
+/* Station editor */
+
+.aw-entry--disabled {
+  opacity: 0.55;
+}
+
+.aw-segtoggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.aw-segtoggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--field);
+}
+
+.aw-segtoggle__icon {
+  flex: none;
+  color: var(--text-2);
+  width: 18px;
+  height: 18px;
+}
+
+.aw-segtoggle__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.aw-segtoggle__title {
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
+}
+
+.aw-segtoggle__meta {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+.aw-feeds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+@media (max-width: 899px) {
+  .aw-segtoggles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.aw-stationedit__top {
+  margin-bottom: var(--space-5);
+}
+
+.aw-talk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.aw-talk .aw-tabs--segmented {
+  align-self: flex-start;
+}
+
+.aw-segtoggle {
+  cursor: pointer;
+}
+
+.aw-segtoggle__title,
+.aw-segtoggle__meta {
+  display: block;
+}
+
+.aw-segtoggle__meta {
+  margin-top: 1px;
+  line-height: 1.35;
+}

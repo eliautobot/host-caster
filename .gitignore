@@ -1,0 +1,42 @@
+# deps and builds
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+
+# runtime data and secrets
+data/
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+
+# android / ios build outputs
+app/android/build/
+app/android/app/build/
+app/android/.gradle/
+app/android/local.properties
+app/android/app/release/
+app/ios/App/build/
+app/ios/App/Pods/
+app/ios/DerivedData/
+*.apk
+# the direct-download APK the website serves (website/README.md, Downloads)
+!website/downloads/android/*.apk
+*.aab
+*.ipa
+# phone test builds handed to people (release/hostcaster-debug.apk)
+release/
+
+# editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+
+# agent work notes
+.work/

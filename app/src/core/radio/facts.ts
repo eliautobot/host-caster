@@ -1,0 +1,21 @@
+// Fun facts the hosts may use. Only well-documented facts: hosts must never make things up on air.
+export const FUN_FACTS: string[] = [
+  'Bohemian Rhapsody by Queen has no chorus at all, and it still became one of the best-loved songs ever.',
+  'The first music video ever played on MTV, in 1981, was Video Killed the Radio Star by The Buggles.',
+  'Yesterday by The Beatles is one of the most covered songs in history, with well over a thousand recorded versions.',
+  'That shiver you sometimes get from a great song has a name: frisson.',
+  'A standard piano has 88 keys: 52 white and 36 black.',
+  'Michael Jackson’s Thriller is widely counted as the best-selling album of all time.',
+  'Stevie Wonder signed with Motown when he was just eleven years old.',
+  'Mozart wrote his first symphony when he was about eight.',
+  'A vinyl LP spins at thirty-three and a third revolutions per minute.',
+  'FM radio stands for frequency modulation: the music rides on tiny changes in the frequency of the signal.',
+  'In 2013 Metallica played a show in Antarctica, making them the first band to play all seven continents in one year.',
+  'Billie Eilish and her brother Finneas made her first album mostly in his bedroom.',
+  'Elvis Presley never played a concert outside North America.',
+  'The word jukebox comes from juke joints, the small dance halls of the American South.',
+  'Dolly Parton wrote Jolene and I Will Always Love You on the same day, or so she has said in interviews.',
+  'The Rolling Stones have been playing together for more than sixty years.',
+  'The Wilhelm scream sound effect has been used in hundreds of movies since the 1950s.',
+  'Daft Punk wore their robot helmets for almost every public appearance for over twenty years.',
+];

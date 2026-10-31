@@ -1,0 +1,152 @@
+/* Host-Caster design tokens. Dark is the default; light lives under [data-theme=light]. No purple anywhere. */
+
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* palette (ARCHITECTURE.md) */
+  --bg: #0a0a0b;
+  --surface: #131315;
+  --surface-2: #1b1b1e;
+  --surface-3: #242428;
+  --line: #2a2a2e;
+  --text: #f4f4f5;
+  --text-2: #a1a1aa;
+  --text-3: #71717a;
+  --accent: #ff5a36;
+  --accent-2: #ffb020;
+  --ok: #22c55e;
+  --danger: #ef4444;
+
+  /* derived */
+  --line-strong: #3a3a40;
+  --accent-ink: #ffffff;
+  --accent-soft: rgb(255 90 54 / 0.14);
+  --accent-2-soft: rgb(255 176 32 / 0.14);
+  --ok-soft: rgb(34 197 94 / 0.14);
+  --danger-soft: rgb(239 68 68 / 0.14);
+  --hover: rgb(255 255 255 / 0.06);
+  --press: rgb(255 255 255 / 0.1);
+  --glass: rgb(19 19 21 / 0.78);
+  --scrim: rgb(0 0 0 / 0.62);
+  --inverse: #f4f4f5;
+  --inverse-ink: #0a0a0b;
+  --raised: #2c2c31; /* selected segment, floating controls */
+  --focus: rgb(255 176 32 / 0.9);
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 6px 20px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.3);
+  --shadow-3: 0 24px 60px rgb(0 0 0 / 0.55), 0 4px 12px rgb(0 0 0 / 0.35);
+  --inner-line: inset 0 0 0 1px rgb(255 255 255 / 0.05);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f3f3f4;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #e9e9ec;
+  --line: #e4e4e7;
+  --text: #0a0a0b;
+  --text-2: #52525b;
+  --text-3: #80808a;
+  --accent: #f24e2a;
+  --accent-2: #e09400;
+  --ok: #16a34a;
+  --danger: #dc2626;
+
+  --line-strong: #d4d4d8;
+  --accent-ink: #ffffff;
+  --accent-soft: rgb(242 78 42 / 0.1);
+  --accent-2-soft: rgb(224 148 0 / 0.12);
+  --ok-soft: rgb(22 163 74 / 0.1);
+  --danger-soft: rgb(220 38 38 / 0.1);
+  --hover: rgb(0 0 0 / 0.045);
+  --press: rgb(0 0 0 / 0.08);
+  --glass: rgb(255 255 255 / 0.8);
+  --scrim: rgb(10 10 11 / 0.4);
+  --inverse: #0a0a0b;
+  --inverse-ink: #ffffff;
+  --raised: #ffffff;
+  --focus: rgb(224 148 0 / 0.9);
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-2: 0 6px 20px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-3: 0 24px 60px rgb(0 0 0 / 0.16), 0 4px 12px rgb(0 0 0 / 0.08);
+  --inner-line: inset 0 0 0 1px rgb(0 0 0 / 0.05);
+}
+
+:root {
+  /* type */
+  --font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.8125rem; /* 13 */
+  --text-md: 0.9375rem; /* 15 */
+  --text-lg: 1.0625rem; /* 17 */
+  --text-xl: 1.25rem; /* 20 */
+  --text-2xl: 1.5rem; /* 24 */
+  --text-3xl: 2rem; /* 32 */
+  --text-4xl: 2.75rem; /* 44 */
+  --weight-regular: 420;
+  --weight-medium: 520;
+  --weight-semibold: 620;
+  --weight-bold: 720;
+  --tracking-tight: -0.022em;
+  --tracking-body: -0.006em;
+
+  /* radius */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
+  /* spacing (4 px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+  --space-10: 72px;
+
+  /* motion (150-250 ms) */
+  --dur-fast: 150ms;
+  --dur: 200ms;
+  --dur-slow: 250ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* layout */
+  --bp-desktop: 900px; /* reference only; media queries use the literal */
+  --sidebar-w: 256px;
+  --playerbar-h: 84px;
+  --tabbar-h: 58px;
+  --miniplayer-h: 60px;
+  --content-max: 1240px;
+  --panel-gap: 8px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* z */
+  --z-sticky: 10;
+  --z-chrome: 20;
+  --z-sheet: 50;
+  --z-toast: 70;
+}
+
+/* Surfaces that adapt to where a component sits. Layout overrides these per region (desktop panel vs phone page). */
+:root {
+  --page-bg: var(--bg);
+  --card: var(--surface);
+  --card-hover: var(--surface-2);
+  --field: var(--surface-2);
+}

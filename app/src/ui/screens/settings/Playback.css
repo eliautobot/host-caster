@@ -1,0 +1,58 @@
+/* Settings -> Playback (owner: player agent). */
+.aw-playback {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.aw-playback__fade {
+  padding-top: var(--space-1);
+}
+
+.aw-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 2px var(--space-5);
+}
+
+.aw-keys__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  border-bottom: 1px solid var(--line);
+}
+
+.aw-keys__row dt {
+  display: flex;
+  gap: 4px;
+  flex: none;
+  min-width: 92px;
+}
+
+.aw-keys__row dd {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.aw-keys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 7px;
+  background: var(--surface-3);
+  box-shadow: var(--inner-line), 0 1px 0 rgb(0 0 0 / 0.25);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.aw-keys kbd svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
+}

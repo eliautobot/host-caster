@@ -1,0 +1,244 @@
+.aw-btn {
+  --btn-h: 40px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: var(--btn-h);
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+
+.aw-btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.aw-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.aw-btn:disabled {
+  opacity: 0.45;
+}
+
+.aw-btn--sm {
+  --btn-h: 32px;
+  padding: 0 14px;
+  font-size: var(--text-sm);
+  gap: 6px;
+}
+
+.aw-btn--sm svg {
+  width: 16px;
+  height: 16px;
+}
+
+.aw-btn--lg {
+  --btn-h: 48px;
+  padding: 0 24px;
+  font-size: var(--text-md);
+}
+
+.aw-btn--lg svg {
+  width: 20px;
+  height: 20px;
+}
+
+.aw-btn--block {
+  width: 100%;
+}
+
+.aw-btn--primary {
+  background: var(--inverse);
+  color: var(--inverse-ink);
+}
+
+@media (hover: hover) {
+  .aw-btn--primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--inverse) 86%, var(--bg));
+  }
+}
+
+.aw-btn--secondary {
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: var(--inner-line);
+}
+
+@media (hover: hover) {
+  .aw-btn--secondary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--surface-3) 80%, var(--text));
+  }
+}
+
+.aw-btn--ghost {
+  color: var(--text-2);
+}
+
+@media (hover: hover) {
+  .aw-btn--ghost:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--hover);
+  }
+}
+
+.aw-btn--accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+@media (hover: hover) {
+  .aw-btn--accent:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 88%, #fff);
+  }
+}
+
+.aw-btn--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+@media (hover: hover) {
+  .aw-btn--danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 24%, transparent);
+  }
+}
+
+.aw-btn--icon {
+  width: var(--btn-h);
+  padding: 0;
+}
+
+.aw-btn--loading > :not(.aw-spinner) {
+  visibility: hidden;
+}
+
+.aw-btn--loading > .aw-spinner {
+  position: absolute;
+}
+
+.aw-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: aw-spin 700ms linear infinite;
+}
+
+/* IconButton */
+.aw-iconbtn {
+  --ib: 40px;
+  --ib-icon: 20px;
+  display: inline-grid;
+  place-items: center;
+  width: var(--ib);
+  height: var(--ib);
+  flex: none;
+  border-radius: 50%;
+  color: var(--text-2);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.aw-iconbtn svg {
+  width: var(--ib-icon);
+  height: var(--ib-icon);
+}
+
+@media (hover: hover) {
+  .aw-iconbtn:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--hover);
+  }
+}
+
+.aw-iconbtn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.aw-iconbtn:disabled {
+  opacity: 0.4;
+}
+
+.aw-iconbtn--sm {
+  --ib: 32px;
+  --ib-icon: 17px;
+}
+
+.aw-iconbtn--lg {
+  --ib: 48px;
+  --ib-icon: 22px;
+}
+
+.aw-iconbtn--xl {
+  --ib: 60px;
+  --ib-icon: 26px;
+}
+
+.aw-iconbtn--solid {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+@media (hover: hover) {
+  .aw-iconbtn--solid:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--surface-3) 80%, var(--text));
+  }
+}
+
+.aw-iconbtn--primary {
+  background: var(--inverse);
+  color: var(--inverse-ink);
+}
+
+@media (hover: hover) {
+  .aw-iconbtn--primary:hover:not(:disabled) {
+    background: var(--inverse);
+    color: var(--inverse-ink);
+    transform: scale(1.05);
+  }
+}
+
+.aw-iconbtn--accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+@media (hover: hover) {
+  .aw-iconbtn--accent:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 88%, #fff);
+    color: var(--accent-ink);
+  }
+}
+
+.aw-iconbtn--active {
+  color: var(--accent);
+}
+
+@media (hover: hover) {
+  .aw-iconbtn--active:hover:not(:disabled) {
+    color: var(--accent);
+  }
+}
+
+.aw-btn__label {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+}

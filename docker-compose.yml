@@ -1,0 +1,28 @@
+# Host-Caster with Docker Compose. Quick start:
+#   cp .env.example .env      # set PUBLIC_URL, and Google / X sign-in if you want them
+#   docker compose up -d      # then open PUBLIC_URL (put HTTPS in front, see docs/SELF-HOSTING.md)
+# A fixed project name keeps the volume name (hostcaster_hostcaster-data) the same whatever the folder is called.
+name: hostcaster
+services:
+  hostcaster:
+    build: .
+    image: hostcaster:latest
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATA_DIR: /data
+      # the server library is on only when MUSIC_PATH (a folder on this machine) is set in .env
+      MUSIC_DIR: ${MUSIC_PATH:+/music}
+    ports:
+      # 127.0.0.1 only: a reverse proxy on this machine adds HTTPS. Use "8660:8660" to open it to the network.
+      - "${HOSTCASTER_BIND:-127.0.0.1}:${HOSTCASTER_PORT:-8660}:8660"
+    volumes:
+      # accounts, synced data, encrypted keys and the secret key (back this up)
+      - hostcaster-data:/data
+      # your music, read-only (an empty ./music folder when MUSIC_PATH is not set)
+      - ${MUSIC_PATH:-./music}:/music:ro
+
+volumes:
+  hostcaster-data:

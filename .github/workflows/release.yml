@@ -1,0 +1,168 @@
+# Release: on a tag v* (or by hand), checks and builds everything and publishes a GitHub release with
+#   - the Android APK: signed when the repository has the signing secrets below, otherwise an unsigned release APK
+#     (sign it yourself) plus a debug APK you can install to try it,
+#   - the web app as a zip (any static host, or APP_DIST of a server),
+#   - SHA-256 checksums.
+# The Docker image for the same tag is published by docker.yml.
+#
+# Android signing secrets (Settings, Secrets and variables, Actions), all four or none:
+#   ANDROID_KEYSTORE_BASE64   base64 of the .jks/.keystore file
+#   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+# Optional repository variable: HOSTCASTER_SERVER, the server the phone app uses until someone picks another one.
+#
+# Desktop builds (Windows, macOS, Linux) slot in as more jobs that upload to the same release: see the desktop job.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build and publish (for example v1.2.0); it must exist
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '24'
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  check:
+    name: Tests and web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            server/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - run: npm ci
+        working-directory: server
+      - run: npm run typecheck
+        working-directory: app
+      - run: npm test
+        working-directory: app
+      - run: npm test
+        working-directory: server
+      - name: Web app
+        working-directory: app
+        run: |
+          VITE_HOSTCASTER_DEBUG=0 npx vite build --outDir dist --emptyOutDir
+          cd dist && zip -qr "$GITHUB_WORKSPACE/host-caster-web-${TAG}.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: host-caster-web-${{ env.TAG }}.zip
+
+  android:
+    name: Android APK
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      HAS_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Android SDK 36
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      - run: npm ci
+        working-directory: app
+      - name: Web app for the phone (no debug tools, no source maps)
+        working-directory: app
+        env:
+          SERVER: ${{ vars.HOSTCASTER_SERVER }}
+        run: |
+          if [ -n "$SERVER" ]; then export VITE_HOSTCASTER_SERVER="$SERVER"; fi
+          VITE_HOSTCASTER_DEBUG=0 npx vite build
+          npx cap sync android
+      - name: Signing key from the repository secrets
+        if: env.HAS_SIGNING == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          {
+            echo "storeFile=$RUNNER_TEMP/release.keystore"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > "$RUNNER_TEMP/keystore.properties"
+      - name: Build
+        working-directory: app/android
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          if [ "$HAS_SIGNING" = true ]; then
+            ./gradlew --no-daemon -q assembleRelease -PhostcasterKeystore="$RUNNER_TEMP/keystore.properties"
+            cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/host-caster-${TAG}.apk"
+          else
+            ./gradlew --no-daemon -q assembleRelease assembleDebug -PhostcasterKeystore=/dev/null
+            cp app/build/outputs/apk/release/app-release-unsigned.apk "$GITHUB_WORKSPACE/out/host-caster-${TAG}-unsigned.apk"
+            cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/out/host-caster-${TAG}-debug.apk"
+          fi
+          rm -f "$RUNNER_TEMP/release.keystore" "$RUNNER_TEMP/keystore.properties"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/*.apk
+
+  # Desktop apps: add a job per platform (for example an Electron build on windows-latest, macos-latest and
+  # ubuntu-latest) that uploads its installers as an artifact named desktop-<platform>; the publish job picks up every
+  # artifact. Kept off until the desktop app is part of this repository.
+  desktop:
+    name: Desktop apps (not yet)
+    if: false
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "desktop builds go here"
+
+  publish:
+    name: Publish the release
+    needs: [check, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums
+        working-directory: assets
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" assets/* --clobber
+          else
+            gh release create "$TAG" assets/* --title "Host-Caster ${TAG#v}" --generate-notes --verify-tag
+          fi

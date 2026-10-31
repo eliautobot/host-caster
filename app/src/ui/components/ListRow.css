@@ -1,0 +1,100 @@
+.aw-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  color: var(--text);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+@media (hover: hover) {
+  a.aw-row:hover,
+  button.aw-row:hover {
+    background: var(--hover);
+  }
+}
+
+a.aw-row:active,
+button.aw-row:active {
+  background: var(--press);
+}
+
+.aw-row--active {
+  background: var(--hover);
+}
+
+.aw-row__leading {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.aw-row__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: var(--inner-line);
+}
+
+.aw-row__icon svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.aw-row__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.aw-row__title {
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-row__subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-row__trailing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.aw-row__chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+}
+
+.aw-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aw-list--card {
+  background: var(--card);
+  border-radius: var(--radius-md);
+  padding: 6px;
+}

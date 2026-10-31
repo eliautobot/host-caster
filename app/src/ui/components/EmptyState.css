@@ -1,0 +1,89 @@
+.aw-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-9) var(--space-5);
+  animation: aw-rise-in var(--dur-slow) var(--ease);
+}
+
+.aw-empty--compact {
+  padding: var(--space-7) var(--space-5);
+}
+
+.aw-empty--card {
+  background: var(--card);
+  border-radius: var(--radius-md);
+}
+
+.aw-empty__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: var(--space-3);
+  border-radius: 50%;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 50% 0%, rgb(255 255 255 / 0.08), transparent 70%),
+    var(--surface-3);
+  box-shadow: var(--inner-line), var(--shadow-2);
+}
+
+.aw-empty__icon::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--surface-3);
+}
+
+.aw-empty--compact .aw-empty__icon {
+  width: 56px;
+  height: 56px;
+}
+
+.aw-empty--compact .aw-empty__icon::after {
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+}
+
+.aw-empty__icon svg {
+  width: 30px;
+  height: 30px;
+  stroke-width: 1.6;
+}
+
+.aw-empty--compact .aw-empty__icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.aw-empty__title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.aw-empty__desc {
+  max-width: 40ch;
+  color: var(--text-2);
+  font-size: var(--text-md);
+  text-wrap: pretty;
+}
+
+.aw-empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}

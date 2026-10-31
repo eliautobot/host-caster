@@ -1,0 +1,81 @@
+.aw-art {
+  --size: 48px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--size);
+  height: var(--size);
+  border-radius: var(--art-radius, 8px);
+  overflow: hidden;
+  color: var(--text-3);
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgb(255 255 255 / 0.07), transparent 60%),
+    var(--surface-3);
+  box-shadow: var(--inner-line);
+}
+
+.aw-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.aw-art svg {
+  width: 42%;
+  height: 42%;
+  stroke-width: 1.6;
+}
+
+.aw-art--fluid {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+/* station tile: colour wash + frequency */
+.aw-station-art {
+  --size: 48px;
+  --c: var(--accent);
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--size);
+  height: var(--size);
+  border-radius: var(--art-radius, 10px);
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(90% 90% at 18% 12%, color-mix(in srgb, var(--c) 95%, #fff 25%), transparent 62%),
+    radial-gradient(120% 120% at 100% 100%, color-mix(in srgb, var(--c) 60%, #000), transparent 70%),
+    color-mix(in srgb, var(--c) 72%, #120a08);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18);
+}
+
+.aw-station-art__freq {
+  font-weight: var(--weight-bold);
+  font-size: calc(var(--size) * 0.3);
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.25);
+}
+
+.aw-station-art__waves {
+  position: absolute;
+  right: -14%;
+  bottom: -14%;
+  width: 70%;
+  height: 70%;
+  opacity: 0.22;
+}
+
+.aw-station-art--fluid {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.aw-station-art--fluid .aw-station-art__freq {
+  font-size: clamp(28px, 22cqi, 64px);
+}

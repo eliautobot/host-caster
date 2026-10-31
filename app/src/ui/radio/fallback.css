@@ -1,0 +1,49 @@
+.aw-fallback-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.aw-fallback-banner__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-2-soft);
+  color: var(--accent-2);
+}
+
+.aw-fallback-banner__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.aw-fallback-banner__text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.aw-noai-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+.aw-noai-line svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--accent-2);
+}

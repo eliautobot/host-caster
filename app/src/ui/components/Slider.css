@@ -1,0 +1,129 @@
+.aw-slider {
+  --pct: 0%;
+  --track-h: 4px;
+  --fill: var(--text);
+  position: relative;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.aw-slider::-webkit-slider-runnable-track {
+  height: var(--track-h);
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--fill) var(--pct), var(--surface-3) var(--pct));
+}
+
+.aw-slider::-moz-range-track {
+  height: var(--track-h);
+  border-radius: 99px;
+  background: var(--surface-3);
+}
+
+.aw-slider::-moz-range-progress {
+  height: var(--track-h);
+  border-radius: 99px;
+  background: var(--fill);
+}
+
+.aw-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: calc((var(--track-h) - 14px) / 2);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.aw-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.aw-slider:focus-visible,
+.aw-slider:active {
+  --fill: var(--accent);
+}
+
+@media (hover: hover) {
+  .aw-slider:hover {
+    --fill: var(--accent);
+  }
+}
+
+.aw-slider:focus-visible::-webkit-slider-thumb,
+.aw-slider:active::-webkit-slider-thumb,
+.aw-slider--thumb::-webkit-slider-thumb {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (hover: hover) {
+  .aw-slider:hover::-webkit-slider-thumb {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.aw-slider:focus-visible::-moz-range-thumb,
+.aw-slider--thumb::-moz-range-thumb {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .aw-slider:hover::-moz-range-thumb {
+    opacity: 1;
+  }
+}
+
+.aw-slider--thumb {
+  --fill: var(--accent);
+}
+
+.aw-slider:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.aw-slider:focus-visible {
+  outline: none;
+}
+
+.aw-slider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aw-slider-field__top {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+}
+
+.aw-slider-field__label {
+  color: var(--text-2);
+  font-weight: var(--weight-medium);
+}
+
+.aw-slider-field__value {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}

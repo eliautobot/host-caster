@@ -1,0 +1,110 @@
+.aw-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.aw-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.aw-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--card);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.aw-tab {
+  flex: none;
+}
+
+.aw-tab svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 899px) {
+  .aw-tabs:not(.aw-tabs--segmented) .aw-tab svg {
+    display: none;
+  }
+}
+
+@media (hover: hover) {
+  .aw-tab:hover {
+    background: var(--card-hover);
+  }
+}
+
+.aw-tab[aria-selected='true'] {
+  background: var(--inverse);
+  color: var(--inverse-ink);
+}
+
+/* segmented */
+.aw-tabs--segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.aw-tabs--segmented .aw-tab {
+  background: transparent;
+  color: var(--text-2);
+  height: 32px;
+}
+
+@media (hover: hover) {
+  .aw-tabs--segmented .aw-tab:hover {
+    color: var(--text);
+  }
+}
+
+.aw-tabs--segmented .aw-tab[aria-selected='true'] {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: var(--shadow-1), var(--inner-line);
+}
+
+/* underline */
+.aw-tabs--underline {
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.aw-tabs--underline .aw-tab {
+  background: transparent;
+  border-radius: 0;
+  padding: 0 2px;
+  height: 40px;
+  color: var(--text-2);
+  box-shadow: inset 0 -2px 0 transparent;
+}
+
+@media (hover: hover) {
+  .aw-tabs--underline .aw-tab:hover {
+    color: var(--text);
+  }
+}
+
+.aw-tabs--underline .aw-tab[aria-selected='true'] {
+  background: transparent;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--text);
+}

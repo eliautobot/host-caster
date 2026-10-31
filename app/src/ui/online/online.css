@@ -1,0 +1,374 @@
+/* Online edition: plan cards, usage meters, included-AI notices. Tokens only (tokens.css). */
+
+/* the cards follow the width they get (a settings card or the wide plan picker), not the window */
+.aw-plans-wrap {
+  width: 100%;
+  container-type: inline-size;
+}
+
+.aw-plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-3);
+}
+
+/* four plans: one column on phones, two by two, then one row */
+.aw-plans[data-count='4'] {
+  grid-template-columns: 1fr;
+}
+
+@container (min-width: 480px) {
+  .aw-plans[data-count='4'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 960px) {
+  .aw-plans[data-count='4'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  /* one row: the badge sits on its own line so names, prices and lists line up across the cards */
+  .aw-plans[data-count='4'] .aw-plan__flag {
+    position: static;
+    min-height: 22px;
+    margin-bottom: calc(var(--space-1) * -1);
+  }
+
+  .aw-plans[data-count='4'] .aw-plan__name {
+    padding-right: 0;
+  }
+}
+
+.aw-plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  text-align: left;
+  transition:
+    box-shadow var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+@media (hover: hover) {
+  .aw-plan:hover {
+    background: var(--card-hover);
+  }
+}
+
+.aw-plan[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px var(--text);
+}
+
+.aw-plan--current {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.aw-plan--premium:not(.aw-plan--current) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 45%, var(--line));
+}
+
+.aw-plan__flag {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+}
+
+.aw-plan__name {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  padding-right: 88px;
+}
+
+.aw-plan__price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.aw-plan__amount {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.aw-plan__per {
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.aw-plan__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.aw-plan__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.aw-plan__list svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--ok);
+}
+
+.aw-plan__list .aw-plan__no svg {
+  color: var(--text-3);
+}
+
+.aw-plan__cta {
+  margin-top: auto;
+}
+
+.aw-plan-free {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.aw-plan-free strong {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+}
+
+/* usage meters */
+.aw-usages {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.aw-usage {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.aw-usage__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.aw-usage__name {
+  font-weight: var(--weight-semibold);
+}
+
+.aw-usage__left {
+  color: var(--text-2);
+  text-align: right;
+}
+
+.aw-usage__bar {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.aw-usage__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text);
+  transition: width var(--dur-slow) var(--ease);
+}
+
+.aw-usage--near .aw-usage__fill {
+  background: var(--accent-2);
+}
+
+.aw-usage--reached .aw-usage__fill {
+  background: var(--accent);
+}
+
+.aw-usage--off {
+  opacity: 0.55;
+}
+
+.aw-usage__note {
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+/* included tile + notice inside brain / voice sheets */
+.aw-included-tile {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.aw-included {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--field);
+}
+
+.aw-included__line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.aw-included__line svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.aw-included__line--ok svg {
+  color: var(--ok);
+}
+
+.aw-included__line--off svg {
+  color: var(--accent-2);
+}
+
+.aw-included__line strong {
+  color: var(--text);
+}
+
+/* Home: usage notice */
+.aw-usage-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--accent-2-soft);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.aw-usage-banner--reached {
+  background: var(--accent-soft);
+}
+
+.aw-usage-banner svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.aw-usage-banner__text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* admin */
+.aw-admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: var(--space-3);
+}
+
+.aw-admin-stat {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--field);
+}
+
+.aw-admin-stat__label {
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.aw-admin-stat__value {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.aw-admin-stat__sub {
+  color: var(--text-2);
+  font-size: var(--text-xs);
+}
+
+.aw-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.aw-admin-table th,
+.aw-admin-table td {
+  padding: var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.aw-admin-table th {
+  color: var(--text-3);
+  font-weight: var(--weight-medium);
+}
+
+.aw-admin-table td:nth-child(n + 3),
+.aw-admin-table th:nth-child(n + 3) {
+  text-align: right;
+}
+
+.aw-admin-table__email {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .aw-admin-table .aw-admin-table__split {
+    display: none;
+  }
+}
+
+/* email code sign-in */
+.aw-code-input input {
+  font-size: var(--text-xl);
+  letter-spacing: 0.35em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* plan picker (bare screen): wide, starts at the top, scrolls on phones */
+.aw-plans-screen {
+  justify-content: flex-start;
+}
+
+.aw-plans-screen .aw-bare__inner {
+  max-width: 1120px;
+}
+
+.aw-plans-screen .aw-plans-wrap {
+  margin-top: var(--space-5);
+}
