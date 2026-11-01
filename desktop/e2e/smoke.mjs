@@ -100,7 +100,10 @@ try {
     if (m.type() === 'error' && !/Failed to load resource|401/.test(m.text())) errors.push(m.text().slice(0, 200));
   });
   page.on('pageerror', (e) => errors.push(String(e.message ?? e).slice(0, 200)));
+  // load once more with the listeners attached: errors while the page loads (a blocked inline script) are otherwise
+  // only caught when the first load happens to be slower than attaching them
   await page.waitForLoadState('domcontentloaded');
+  await page.reload({ waitUntil: 'domcontentloaded' });
   check('the app starts and opens its window on app://host-caster', page.url().startsWith('app://host-caster/'), page.url());
   check('window title', (await page.title()) === 'Host-Caster', await page.title());
   // the window shows on ready-to-show, which can come a moment after the page loads (slow CI runners, no window manager)

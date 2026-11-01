@@ -1,10 +1,10 @@
 // The app's own pages: the web app (built with Vite) is bundled inside the desktop app and served from app://host-caster
 // (a privileged, secure, standard scheme: a stable origin for IndexedDB, Media Session, fetch and CORS). Nothing
 // outside the bundled folder can be read, and unknown paths fall back to index.html (Spotify's /spotify/callback).
-import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { protocol } from 'electron';
+import { contentSecurityPolicy } from './csp.js';
 
 export const APP_SCHEME = 'app';
 export const APP_HOST = 'host-caster';
@@ -38,26 +38,6 @@ export function registerAppScheme() {
   protocol.registerSchemesAsPrivileged([
     { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true, codeCache: true } },
   ]);
-}
-
-/** Hashes of the inline scripts in a page, for its Content-Security-Policy. */
-export function inlineScriptHashes(html) {
-  const out = [];
-  for (const m of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
-    out.push(`'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`);
-  }
-  return out;
-}
-
-/** Scripts only from the app itself, its own inline theme script, and the YouTube / Spotify players it embeds. */
-export function contentSecurityPolicy(html) {
-  return [
-    `script-src 'self' ${inlineScriptHashes(html).join(' ')} https://www.youtube.com https://s.ytimg.com https://sdk.scdn.co`,
-    "object-src 'none'",
-    "base-uri 'self'",
-    "frame-ancestors 'none'",
-    "form-action 'none'",
-  ].join('; ');
 }
 
 /** Serves `appDir` on app://host-caster. */
