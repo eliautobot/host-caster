@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const desktopDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repo = resolve(desktopDir, '..');
@@ -80,8 +80,9 @@ writeFileSync(
   )}\n`,
 );
 
-// the helper must load with nothing but the staged files (no server dependencies, no missing module)
-const check = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(join(stage, 'desktop/main/helper/server.js'))})`], {
+// the helper must load with nothing but the staged files (no server dependencies, no missing module); a file:// URL,
+// because Windows absolute paths (D:\...) are not valid ESM specifiers
+const check = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(join(stage, 'desktop/main/helper/server.js')).href)})`], {
   encoding: 'utf8',
 });
 if (check.status !== 0) {

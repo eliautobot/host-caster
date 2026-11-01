@@ -103,7 +103,11 @@ try {
   await page.waitForLoadState('domcontentloaded');
   check('the app starts and opens its window on app://host-caster', page.url().startsWith('app://host-caster/'), page.url());
   check('window title', (await page.title()) === 'Host-Caster', await page.title());
-  const visible = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible()));
+  // the window shows on ready-to-show, which can come a moment after the page loads (slow CI runners, no window manager)
+  let visible = false;
+  for (const t0 = Date.now(); !visible && Date.now() - t0 < 15000; await new Promise((r) => setTimeout(r, 250))) {
+    visible = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.isVisible()));
+  }
   check('the window is shown', visible);
   await page.locator('#root *').first().waitFor({ timeout: 30000 }).catch(() => undefined);
   await shot(page, '1-start');
