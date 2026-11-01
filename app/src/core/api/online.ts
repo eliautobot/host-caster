@@ -1,7 +1,7 @@
 // The hosted Host-Caster service (online edition): email sign-in codes, Sign in with Apple, plans (Stripe Checkout and
 // Customer Portal, opened in the browser), usage meters and the admin summary. Self-hosted servers have none of it.
 import { kvDelete, kvGet, kvSet } from '../db/kv';
-import { isNative, openAuthUrl, sellsPlans } from '../native';
+import { isDesktop, isNative, openAuthUrl, sellsPlans } from '../native';
 import type { ApiSession, PlanInfo } from '../types';
 import { api, request } from './client';
 import { auth, usesBearer } from './auth';
@@ -72,17 +72,17 @@ export const online = {
   /** Re-reads the plan from Stripe (after Checkout or the Portal; webhooks can lag a few seconds). */
   sync: () => request<BillingStatus>('POST', '/api/billing/sync', {}),
 
-  /** Opens Stripe Checkout for a new plan (this tab on web, the browser on phones). from = where it returns. */
+  /** Opens Stripe Checkout for a new plan (this tab on web, the browser on phones and computers). from = where it returns. */
   async checkout(plan: PlanId, from: 'plans' | 'settings' = 'settings'): Promise<void> {
     if (!sellsPlans) throw new Error('Plans are not sold in this app.');
-    const { url } = await request<{ url: string }>('POST', '/api/billing/checkout', { plan, app: isNative, from });
+    const { url } = await request<{ url: string }>('POST', '/api/billing/checkout', { plan, app: isNative || isDesktop, from });
     await openExternal(url);
   },
 
   /** The Stripe Customer Portal: change plan, card or cancel (cancel = at the end of the period). */
   async portal(opts: { flow?: 'cancel' | 'change'; plan?: PlanId } = {}): Promise<void> {
     if (!sellsPlans) throw new Error('Plan changes are not available in this app.');
-    const { url } = await request<{ url: string }>('POST', '/api/billing/portal', { ...opts, app: isNative });
+    const { url } = await request<{ url: string }>('POST', '/api/billing/portal', { ...opts, app: isNative || isDesktop });
     await openExternal(url);
   },
 
@@ -102,7 +102,8 @@ export const online = {
 };
 
 async function openExternal(url: string): Promise<void> {
-  if (isNative) await openAuthUrl(url);
+  // the desktop app: Stripe opens in the system browser and hands back with hostcaster://billing, like the phones
+  if (isNative || isDesktop) await openAuthUrl(url);
   else window.location.assign(url);
 }
 

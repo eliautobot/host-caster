@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Server } from 'lucide-react';
 import { api } from '@/core/api';
-import { isNative } from '@/core/native';
+import { isDesktop, isNative } from '@/core/native';
 import { useSession } from '@/state/session';
 import { runAction } from '../../../actions';
 import { Button, TextField, toast } from '../../../components';
@@ -53,7 +53,7 @@ export function ServerCard() {
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
-            hint={isNative ? 'The address you open Host-Caster at in a browser. Leave empty for Host-Caster.' : 'Leave empty to use the server this page came from.'}
+            hint={isNative || isDesktop ? 'The address you open Host-Caster at in a browser. Leave empty for Host-Caster.' : 'Leave empty to use the server this page came from.'}
             onKeyDown={(e) => e.key === 'Enter' && void save()}
           />
           <Actions>

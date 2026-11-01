@@ -4,7 +4,8 @@ Host-Caster is a personal AI radio station. Your music (local files, a self-host
 internet radio, or any music app on Android) plays like a station, and AI hosts you design break in between songs to
 talk about the songs, your day (calendar, email, weather, news, life events, notes) and each other.
 
-One codebase, three targets: web app (PWA, served by the server), Android and iOS (Capacitor). Local first: everything
+One codebase, four targets: web app (PWA, served by the server), Android and iOS (Capacitor), and the desktop app for
+Windows, Mac and Linux (Electron, `desktop/`). Local first: everything
 works on the device with no account and no internet (local songs, device voice, a model on the LAN, and the scripted fallback
 when no AI is connected). Signing in (Google or X, or a local password on self-hosted servers) adds sync and cloud features.
 
@@ -18,10 +19,11 @@ app/                     Vite 8 + React 19 + TypeScript client (web, Android, iO
   src/ui/                React: components/, screens/, player/, layout/, theme.css, tokens.css
   src/state/             zustand stores (thin; logic lives in core)
   android/ ios/          Capacitor native projects (own Java/Swift plugin code inside)
+desktop/                 Electron app: main/ (main process, preload.cjs, helper/ = local helper), scripts/, e2e/, test/
 server/                  Node 24 ESM, Fastify 5, node:sqlite, no native deps
   src/                   index.js, config.js, db.js, auth/, routes/, integrations/, mcp/, library/
   test/                  node:test
-docs/                    SELF-HOSTING.md, PROVIDERS.md, PRIVACY.md, screenshots/
+docs/                    SELF-HOSTING.md, PROVIDERS.md, PRIVACY.md, DESKTOP.md, screenshots/
 Dockerfile, docker-compose.yml, .github/workflows/ci.yml, README.md, LICENSE
 ```
 
@@ -326,6 +328,46 @@ app only exchanges a deep-link code when it has that verifier, and the server on
   emits track changes; breaks are spoken with transient audio focus (`GAIN_TRANSIENT_MAY_DUCK`) so the other app
   ducks or pauses and resumes after. iOS: speak with `.duckOthers`.
 - Deep link scheme `hostcaster`. App id `com.hostcaster.app`.
+
+## Desktop app (Windows, Mac, Linux; `desktop/`, user and build guide: docs/DESKTOP.md)
+
+Electron. The window loads the same web app, bundled, from `app://host-caster` (privileged secure standard scheme:
+stable origin for IndexedDB; CSP: scripts only from the app, its inline theme script hash, YouTube and Spotify).
+It is a client of the online server (default `https://app.host-caster.com`, `HOSTCASTER_SERVER` at build or run time;
+Settings, Account, Server picks another): bearer session, sign-in in the system browser back through `hostcaster://`
+(single-instance lock: Windows/Linux pass the link as an argument to the running app, macOS `open-url`; a packaged
+AppImage registers itself with a hidden desktop entry), email codes in the app, Stripe through the browser and
+`hostcaster://billing`. Sandboxed preload (`desktop/main/preload.cjs`) exposes only `window.hostcasterDesktop`;
+`app/src/core/native/desktop.ts` (`desktop`, `isDesktop`) is the page's side. Desktop specifics in the app: `sellsPlans`
+stays true (not a store app), `defaultServerUrl()` = the bridge's server, links/openAuthUrl use the system browser,
+sync also pulls on window focus (the page stays "visible": `backgroundThrottling: false` so the radio runs while
+minimized), the YouTube on-screen rule applies (`youTubeNeedsScreen`: minimized or hidden window = off screen), YouTube
+embeds get `Referer: https://com.hostcaster.app/` (YouTube RMF API client identity), Settings, Desktop app
+(`ui/screens/settings/Desktop.tsx`, `state/desktop.ts`), the update card.
+
+**Local helper** (`desktop/main/helper/`, in the main process): HTTP on `127.0.0.1:<random>`; every request needs
+`x-hc-helper: <secret made at launch>` (handed to the page by the preload), the app origin or none, and the exact
+`127.0.0.1:<port>` Host. Routes mirror the server: `/api/chatgpt/{status,start,finish,cancel,welcome,models,disconnect}`
+and `POST /api/ai/chat|models` for `chatgpt` brains run the server's own `server/src/chatgpt/service.js`
+(`createChatGPT(app, { store, flows })`) with a one-person store on the PC (`helper/store.js`, `chatgpt.json`, token set
+sealed by Electron `safeStorage`: Keychain, DPAPI, Secret Service; Linux without a keyring falls back to Electron's
+plain-text key and says so) and in-memory flows; the ChatGPT callback listener is on this PC's 127.0.0.1, the agent
+host id in `chatgpt-host.json`. `GET|POST /proxy?url=` carries 'device' brain and voice calls (`desktopFetch` from
+`core/ai/http.ts`: no CORS, plain http on the LAN); helper failures are marked `x-hc-proxy-error`. On desktop
+`core/api/chatgpt.ts` and `core/ai/generate.ts` send ChatGPT plan calls to the helper (`core/api/helper.ts`), never to
+the online server. "Use your ChatGPT plan" is off until Settings, Desktop app turns it on (OpenAI's terms for paid apps,
+docs/DESKTOP.md).
+
+Updates: the main process reads `<site>/download/desktop/latest.json` (`desktop/main/updates.js`; the site writes it
+from `website/downloads.json`, forks can use `desktop/scripts/manifest.mjs`) at start and every 6 h; the page shows the
+same "A new version is ready" card as the Android download (`ui/update/UpdateNotice.tsx`), and Download opens the
+Download page. Notion connects like on the phones (system browser, `hostcaster://notion`, the app's PKCE verifier).
+Packaging: electron-builder (`desktop/electron-builder.config.cjs`): AppImage + .deb, NSIS installer + portable zip
+(Windows runner or Wine), universal ad-hoc-signed .dmg (Mac). CI: the public repository's `.github/workflows/desktop.yml`
+(here `scripts/public/overlay/`), reusable: builds on each system plus a launch smoke test of the packaged app
+(`desktop/e2e/smoke.mjs`), called by `release.yml` on `v*` tags to attach the files to the release. Tests:
+`desktop/test/*.test.js` (node), the Playwright `_electron` e2e `desktop/e2e/desktop.e2e.mjs` (run with
+`desktop/e2e/run-xvfb.sh`) against `desktop/e2e/lab.mjs` (both private: they need the online lab).
 
 ## Testing
 

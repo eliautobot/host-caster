@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, Mail, Server, TriangleAlert } from 'lucide-react';
 import { api, auth, signInErrorText, usesBearer } from '@/core/api';
 import { getSettings } from '@/core/db';
-import { isNative } from '@/core/native';
+import { isDesktop, isNative } from '@/core/native';
 import type { ApiSession } from '@/core/types';
 import { back, navigate } from '@/state/router';
 import { useSession, waitForFirstSync } from '@/state/session';
@@ -106,7 +106,7 @@ function ServerField({ onDone }: { onDone: () => void }) {
         autoCorrect="off"
         spellCheck={false}
         icon={Server}
-        hint={isNative ? 'Your own server, or the one a friend runs for you. Leave empty for Host-Caster.' : 'Leave empty for the server this page came from.'}
+        hint={isNative || isDesktop ? 'Your own server, or the one a friend runs for you. Leave empty for Host-Caster.' : 'Leave empty for the server this page came from.'}
       />
       <Button type="submit" size="lg" block loading={busy}>
         Connect
@@ -120,14 +120,15 @@ export default function SignIn({ query }: ScreenProps) {
   const config = useSession((s) => s.config);
   const available = useSession((s) => s.available);
   const session = useSession((s) => s.session);
-  const [mode, setMode] = useState<'buttons' | 'local' | 'server'>(available || api.baseUrl || !isNative ? 'buttons' : 'server');
+  const [mode, setMode] = useState<'buttons' | 'local' | 'server'>(available || api.baseUrl || !(isNative || isDesktop) ? 'buttons' : 'server');
   const [busy, setBusy] = useState<string>();
   // the hosted Host-Caster service: email codes, Google, Apple, X; an account is required
   if (config?.edition === 'online') return <OnlineSignIn error={query.error} />;
   const then = query.then;
   const error = query.error ? signInErrorText(query.error) : undefined;
-  // OAuth needs a redirect back to this origin; a web page pointed at another server can only use passwords there.
-  const oauthHere = isNative || !usesBearer();
+  // OAuth needs a redirect back to this origin (or the app's hostcaster:// link: phones and the desktop app); a web page
+  // pointed at another server can only use passwords there.
+  const oauthHere = isNative || isDesktop || !usesBearer();
   const google = available && config?.signIn.google && oauthHere;
   const x = available && config?.signIn.x && oauthHere;
   const local = available && config?.signIn.local;
@@ -199,7 +200,7 @@ export default function SignIn({ query }: ScreenProps) {
                   )}
                   {!available && (
                     <p className="aw-signin__note">
-                      {api.baseUrl || !isNative ? `${serverLabel() || 'The server'} is not answering right now.` : 'No server set yet.'}
+                      {api.baseUrl || !(isNative || isDesktop) ? `${serverLabel() || 'The server'} is not answering right now.` : 'No server set yet.'}
                     </p>
                   )}
                   {none && <p className="aw-signin__note">This server has no sign-in set up yet. Its owner can add Google, X or local accounts.</p>}

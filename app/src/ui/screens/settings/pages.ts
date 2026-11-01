@@ -2,8 +2,8 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import { AudioLines, BrainCircuit, Database, Palette, Plug, UserRound, Contact, type LucideIcon } from 'lucide-react';
 import { Headphones, ListMusic } from 'lucide-react';
-import { Eye, Smartphone } from 'lucide-react';
-import { isNative, sellsPlans } from '@/core/native';
+import { Eye, Monitor, Smartphone } from 'lucide-react';
+import { desktopOsName, isDesktop, isNative, sellsPlans } from '@/core/native';
 import { CreditCard, ShieldCheck } from 'lucide-react';
 import { api, isOnline } from '@/core/api';
 
@@ -52,6 +52,9 @@ export const settingsPages: SettingsPageDef[] = [
   // Android/iOS apps only (owner: native agent)
   ...(isNative ? [{ id: 'device', title: 'This device', description: 'Background play, permissions, any music app',
     icon: Smartphone, group: 'App' as const, screen: lazy(() => import('./Device')) }] : []),
+  // the desktop app only (desktop/ in the repo)
+  ...(isDesktop ? [{ id: 'desktop', title: 'Desktop app', description: `ChatGPT plan, updates and Host-Caster for ${desktopOsName()}`,
+    icon: Monitor, group: 'App' as const, screen: lazy(() => import('./Desktop')) }] : []),
 ];
 
 export function getSettingsPage(id: string | undefined): SettingsPageDef | undefined {

@@ -172,6 +172,22 @@ Android only (iOS does not allow it).
 App id `com.hostcaster.app`, link scheme `hostcaster://`. If you publish your own build, change the app id in
 `app/capacitor.config.ts` and the native projects, and use your own name and icon ([TRADEMARKS.md](TRADEMARKS.md)).
 
+## Desktop app
+
+Windows, Mac and Linux: the same web app in an Electron window (`desktop/`), for your server or the hosted service,
+plus your ChatGPT plan as the hosts' brain (off until you turn it on) and AI and voices at plain `http://` addresses on
+your computer or network. Each release on this repository has the Windows installer and portable zip, a universal
+macOS dmg and a Linux AppImage and .deb, built and smoke-tested by GitHub Actions (`.github/workflows/desktop.yml`).
+They are not code-signed yet: Windows shows "Windows protected your PC" (More info, Run anyway) and macOS asks once in
+System Settings, Privacy & Security (Open Anyway). [docs/DESKTOP.md](docs/DESKTOP.md) has the install steps, the
+ChatGPT plan terms, the security model and how to build it:
+
+```sh
+cd app && npm ci && cd ../desktop && npm ci
+scripts/build-app.sh && npm start      # run it (HOSTCASTER_SERVER=https://your.server for your own server)
+npm run dist:linux                     # AppImage + .deb; dist:win on Windows, dist:mac on a Mac
+```
+
 ## Documentation
 
 - [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md): run your own server, HTTPS, Google and X sign-in, phone apps, music
@@ -179,6 +195,7 @@ App id `com.hostcaster.app`, link scheme `hostcaster://`. If you publish your ow
 - [docs/PROVIDERS.md](docs/PROVIDERS.md): every AI brain, voice and music source, with setup steps.
 - [docs/YOUTUBE.md](docs/YOUTUBE.md): YouTube with your own Google OAuth client.
 - [docs/CHATGPT-PLAN.md](docs/CHATGPT-PLAN.md): your ChatGPT plan as the hosts' brain.
+- [docs/DESKTOP.md](docs/DESKTOP.md): the Windows, Mac and Linux app: install, first open, updates, building it.
 - [docs/MUSIC-SOURCES.md](docs/MUSIC-SOURCES.md): what each music source needs on your server.
 - [docs/PRIVACY.md](docs/PRIVACY.md): what is stored where and who sees what.
 - [ARCHITECTURE.md](ARCHITECTURE.md): how the code fits together.

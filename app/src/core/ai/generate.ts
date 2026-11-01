@@ -1,6 +1,8 @@
 // core/ai: one entry point for every brain kind and transport.
 // transport 'device' = direct fetch (CapacitorHttp on native); 'server' = the Host-Caster server holds the key.
 import { aiProxy, api } from '../api';
+import { helperRequest } from '../api/helper';
+import { isDesktop } from '../native/desktop';
 import type { Brain, GenerateRequest } from '../types';
 import { anthropicChat, anthropicModels } from './anthropic';
 import { isFallback } from './brains';
@@ -20,6 +22,9 @@ export interface GenerateOptions {
   force?: boolean;
 }
 
+/** The desktop app runs ChatGPT plan brains in its local helper, which holds the ChatGPT sign-in on that computer. */
+const viaHelper = (brain: Brain) => isDesktop && brain.kind === 'chatgpt';
+
 /** ChatGPT plan brains always run on the server, which holds the user's ChatGPT sign-in; so does Host-Caster AI. */
 const viaServer = (brain: Brain) => brain.transport === 'server' || brain.kind === 'chatgpt' || brain.kind === 'hostcaster';
 
@@ -34,6 +39,15 @@ export async function generate(brain: Brain, req: GenerateRequest, opts: Generat
   if (isFallback(brain)) throw new NoModelError('No AI brain: the scripted fallback writes these lines');
   if (brain.kind === 'connector') throw new NoModelError(`${brain.name} sends notes; it does not write breaks`);
   const fo: FetchOpts = { signal: opts.signal, timeoutMs: opts.timeoutMs ?? 45_000 };
+  if (viaHelper(brain)) {
+    const res = await helperRequest<{ text: string }>(
+      'POST',
+      '/api/ai/chat',
+      { brain: { kind: brain.kind, model: brain.model }, system: req.system, messages: req.messages, json: req.json, ...(opts.force ? { force: true } : {}) },
+      { timeoutMs: 100_000, signal: mergeSignal(fo) },
+    );
+    return res.text;
+  }
   if (viaServer(brain)) {
     needsServer(brain);
     const res = await aiProxy.chat(
@@ -50,6 +64,7 @@ export async function generate(brain: Brain, req: GenerateRequest, opts: Generat
 export async function listModels(brain: Brain, opts: GenerateOptions = {}): Promise<string[]> {
   if (isFallback(brain) || brain.kind === 'connector') return [];
   const fo: FetchOpts = { signal: opts.signal, timeoutMs: opts.timeoutMs ?? 15_000 };
+  if (viaHelper(brain)) return (await helperRequest<{ models: string[] }>('POST', '/api/ai/models', {}, { signal: mergeSignal(fo) })).models.filter(isChatModel);
   if (viaServer(brain)) {
     needsServer(brain);
     return (await aiProxy.models(brain.id, { ...brain, transport: 'server' })).models.filter(isChatModel);

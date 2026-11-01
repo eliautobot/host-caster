@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Mail, TriangleAlert } from 'lucide-react';
 import { api, auth, online, signInErrorText } from '@/core/api';
-import { isNative, sellsPlans } from '@/core/native';
+import { isDesktop, isNative, sellsPlans } from '@/core/native';
 import { navigate } from '@/state/router';
 import { useSession } from '@/state/session';
 import { runAction } from '../../actions';
@@ -156,7 +156,11 @@ export function OnlineSignIn({ error: errorCode }: { error?: string }) {
         ) : (
           <>
             <h1 className="aw-bare__title">Sign in to Host-Caster</h1>
-            <p className="aw-bare__lead">Your personal AI radio. One account for the web, Android and iPhone.</p>
+            <p className="aw-bare__lead">
+              {isDesktop
+                ? 'Your personal AI radio. The same account as on the web and your phone.'
+                : 'Your personal AI radio. One account for the web, Android and iPhone.'}
+            </p>
             {error && (
               <p className="aw-signin__error" role="alert">
                 <TriangleAlert aria-hidden />
@@ -201,7 +205,7 @@ export function OnlineSignIn({ error: errorCode }: { error?: string }) {
               {api.available
                 ? `New here? Signing in creates your account.${sellsPlans ? ' Free to start, cancel a plan anytime.' : ''}`
                 : 'Host-Caster is not answering right now. Try again in a moment.'}
-              {isNative ? ` · ${api.baseUrl}` : ''}
+              {isNative || isDesktop ? ` · ${api.baseUrl}` : ''}
             </p>
             <SignInAgreement />
           </>

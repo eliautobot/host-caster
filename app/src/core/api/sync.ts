@@ -6,6 +6,7 @@ import { liveQuery, type Subscription } from 'dexie';
 import { db } from '../db/db';
 import { kvDelete, kvGet, kvSet } from '../db/kv';
 import { migrateDocBrains } from '../db/noBrain';
+import { desktop } from '../native/desktop';
 import { PROFILE_ID, SETTINGS_ID, type Brain, type Playlist, type Settings, type SyncDoc, type VoiceProvider } from '../types';
 import { createEmitter } from '../util/emitter';
 import { api, ApiError, isOffline, request } from './client';
@@ -259,6 +260,8 @@ function schedule(delay = PUSH_DELAY): void {
 const onFocus = () => {
   if (document.visibilityState === 'visible') void run(true);
 };
+/** the desktop app keeps the page "visible" (music plays on when minimized): its window focus counts instead */
+let offWindow: (() => void) | undefined;
 
 export const sync = {
   get state(): SyncState {
@@ -295,6 +298,9 @@ export const sync = {
       if (!applying) schedule();
     });
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onFocus);
+    offWindow ??= desktop?.onWindowState((s) => {
+      if (s.focused) void run(true);
+    });
     pullTimer ??= setInterval(() => void run(true), PULL_EVERY);
     await run(true);
   },
@@ -310,6 +316,8 @@ export const sync = {
     unwatchItems = undefined;
     lastFingerprint = '';
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onFocus);
+    offWindow?.();
+    offWindow = undefined;
     await running;
     if (!keepBase) {
       await kvDelete(BASE_KEY);

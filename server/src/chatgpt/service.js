@@ -56,9 +56,15 @@ function refreshTime(v) {
   return Number.isFinite(ms) ? ms : undefined;
 }
 
-export function createChatGPT(app) {
+/**
+ * @param {object} app the server (config, db, sealer, log)
+ * @param {{ store?: ReturnType<typeof createStore>, flows?: { put: Function, take: Function } }} [deps] another store
+ *   and one-time flow keeper (the desktop app's local helper keeps one person's sign-in on their PC, without SQLite)
+ */
+export function createChatGPT(app, deps = {}) {
   const cfg = app.config.chatgpt;
-  const store = createStore(app);
+  const store = deps.store ?? createStore(app);
+  const flows = deps.flows ?? { put: (kind, value) => putFlow(app.db, kind, value), take: (kind, raw) => takeFlow(app.db, kind, raw) };
   const oidc = createOidc(cfg.issuer);
   const refreshing = new Map();
   let hostId;
@@ -92,7 +98,7 @@ export function createChatGPT(app) {
     const { verifier, challenge } = pkcePair();
     const nonce = randomToken(24);
     const flowData = { verifier, nonce, redirectUri, clientId: saved?.client_id ?? null, accountId: saved?.id ?? null };
-    const state = putFlow(app.db, 'chatgpt', {
+    const state = flows.put('chatgpt', {
       provider: 'chatgpt',
       userId,
       data: { sealed: app.sealer.seal(JSON.stringify(flowData), `chatgpt-flow:${userId}`) },
@@ -122,7 +128,7 @@ export function createChatGPT(app) {
     need();
     const q = url.searchParams;
     if (q.getAll('state').length !== 1) throw chatgptError.flow('That address is not a ChatGPT sign-in answer. Copy the whole address from the ChatGPT tab.');
-    const flow = takeFlow(app.db, 'chatgpt', q.get('state'));
+    const flow = flows.take('chatgpt', q.get('state'));
     if (!flow || (userId && flow.userId !== userId)) {
       throw chatgptError.flow('This sign-in expired or was already used. Start again with Continue with ChatGPT.');
     }

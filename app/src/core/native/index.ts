@@ -27,4 +27,17 @@ export {
 } from './device';
 export { startNativeShell, type NativeShellOptions } from './shell';
 export { loopback, type LoopbackListener } from './loopback';
+export {
+  desktop,
+  isDesktop,
+  desktopFetch,
+  desktopOsName,
+  helperFetch,
+  PROXY_ERROR_HEADER,
+  type DesktopBridge,
+  type DesktopSettings,
+  type DesktopUpdate,
+  type DesktopUpdateCheck,
+  type DesktopWindowState,
+} from './desktop';
 export type { MediaActionEvent, MediaActionName, MediaActionReason, FocusState } from './plugin';

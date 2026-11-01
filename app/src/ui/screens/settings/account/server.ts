@@ -1,7 +1,7 @@
 // Which Host-Caster server this device talks to (settings.serverUrl). '' on web = the server that served the app.
 import { api, auth, sync } from '@/core/api';
 import { saveSettings } from '@/core/db';
-import { isNative } from '@/core/native';
+import { desktop, isNative } from '@/core/native';
 import type { ServerConfig } from '@/core/types';
 
 /**
@@ -10,8 +10,11 @@ import type { ServerConfig } from '@/core/types';
  */
 export const DEFAULT_NATIVE_SERVER = (import.meta.env.VITE_HOSTCASTER_SERVER ?? 'https://app.host-caster.com').trim();
 
-/** Where this device talks to when no server was picked: the default on the phone apps, the page's own server on web. */
-export const defaultServerUrl = (): string => (isNative ? DEFAULT_NATIVE_SERVER : '');
+/**
+ * Where this device talks to when no server was picked: the default on the phone apps, the one the desktop app was
+ * built for (the hosted service unless its build says otherwise), the page's own server on web.
+ */
+export const defaultServerUrl = (): string => (desktop ? desktop.defaultServer : isNative ? DEFAULT_NATIVE_SERVER : '');
 
 /** A host on this device, a home or private network, or a tailnet (where plain http is acceptable). */
 export function isPrivateHost(hostname: string): boolean {

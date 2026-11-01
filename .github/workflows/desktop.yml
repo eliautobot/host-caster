@@ -1,0 +1,195 @@
+# Host-Caster desktop app (desktop/, Electron): the helper and update tests, then a build on each system's own runner
+# and a launch smoke test of the packaged app there (desktop/e2e/smoke.mjs: the app starts, its window loads the app,
+# the sign-in screen shows and reaches a server, Settings > Desktop app opens, nothing crashes).
+#   Windows  NSIS installer (installed silently on the runner, then started) + portable zip (unpacked, started)
+#   macOS    universal .dmg, ad-hoc signed (mounted, the app copied out, signature and both halves checked, started)
+#   Linux    AppImage (started) + .deb (installed with apt, started)
+# Runs on pull requests that touch the desktop app, by hand (Actions, Desktop, Run workflow) and from release.yml on a
+# v* tag, which publishes the files with the release. Builds are unsigned unless these repository secrets exist:
+#   Windows signing: WIN_CSC_LINK (base64 .pfx), WIN_CSC_KEY_PASSWORD
+#   macOS signing:   MAC_CSC_LINK (base64 Developer ID Application .p12), MAC_CSC_KEY_PASSWORD
+#   notarization:    APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+# Optional repository variables for a fork's own defaults: HOSTCASTER_SERVER, HOSTCASTER_SITE, HOSTCASTER_UPDATE_URL.
+name: Desktop
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit or tag to build (default the one that started the run)
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit or tag to build (empty = the branch you pick above)
+        type: string
+        default: ''
+  pull_request:
+    paths: ['desktop/**', 'server/src/chatgpt/**', '.github/workflows/desktop.yml']
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  test:
+    name: Helper + update tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Tests (desktop helper, updates)
+        working-directory: desktop
+        run: node --test test/*.test.js
+
+  build:
+    name: Build + smoke ${{ matrix.name }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            dist: dist:linux
+          - name: Windows
+            os: windows-latest
+            dist: dist:win
+          - name: macOS
+            os: macos-latest
+            dist: dist:mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      SHOTS: ${{ github.workspace }}/smoke
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            server/package-lock.json
+            desktop/package-lock.json
+      - name: Install (app)
+        working-directory: app
+        run: npm ci
+      - name: Install (server, for the smoke test's sign-in server)
+        working-directory: server
+        run: npm ci --omit=dev
+      - name: Install (desktop)
+        working-directory: desktop
+        run: |
+          npm ci
+          node node_modules/electron/install.js
+      - name: Build the web app and stage it
+        working-directory: desktop
+        shell: bash
+        env:
+          HOSTCASTER_SERVER: ${{ vars.HOSTCASTER_SERVER }}
+          HOSTCASTER_SITE: ${{ vars.HOSTCASTER_SITE }}
+          HOSTCASTER_UPDATE_URL: ${{ vars.HOSTCASTER_UPDATE_URL }}
+        run: scripts/build-app.sh
+      - name: Package
+        working-directory: desktop
+        shell: bash
+        env:
+          # Windows: rcedit sets the icon and version info (no Wine needed on a Windows runner)
+          HOSTCASTER_EDIT_EXE: ${{ matrix.os == 'windows-latest' && '1' || '0' }}
+          CSC_LINK: ${{ matrix.os == 'windows-latest' && secrets.WIN_CSC_LINK || matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'windows-latest' && secrets.WIN_CSC_KEY_PASSWORD || matrix.os == 'macos-latest' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          [ -n "$CSC_LINK" ] || unset CSC_LINK CSC_KEY_PASSWORD
+          npm run ${{ matrix.dist }}
+          ls -l .build/out
+
+      - name: Smoke test (Linux AppImage + .deb)
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        shell: bash
+        run: |
+          command -v xvfb-run > /dev/null || { sudo apt-get update -q && sudo apt-get install -y -q xvfb; }
+          screen=(xvfb-run -a -s "-screen 0 1440x900x24")
+          # the runner has no FUSE 2: the AppImage unpacks itself and runs
+          APPIMAGE_EXTRACT_AND_RUN=1 HC_EXE="$(ls "$PWD"/.build/out/*.AppImage)" HC_SMOKE_LABEL=linux-appimage "${screen[@]}" node e2e/smoke.mjs
+          sudo apt-get install -y -q "$(ls "$PWD"/.build/out/*.deb)"
+          test -x /opt/Host-Caster/host-caster
+          grep -q 'x-scheme-handler/hostcaster' /usr/share/applications/host-caster.desktop
+          HC_EXE=/opt/Host-Caster/host-caster HC_SMOKE_LABEL=linux-deb "${screen[@]}" node e2e/smoke.mjs
+
+      - name: Smoke test (Windows installer + portable zip)
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem .build/out/Host-Caster-Setup-*.exe | Select-Object -First 1
+          $proc = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "installer exit code $($proc.ExitCode)" }
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\Host-Caster'
+          $exe = Join-Path $dir 'Host-Caster.exe'
+          if (-not (Test-Path $exe)) { throw "not installed at $exe" }
+          if (-not (Test-Path (Join-Path $dir 'Uninstall Host-Caster.exe'))) { throw 'no uninstaller' }
+          $env:HC_EXE = $exe; $env:HC_SMOKE_LABEL = 'windows-installed'
+          node e2e/smoke.mjs
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $zip = Get-ChildItem .build/out/Host-Caster-*-win-x64.zip | Select-Object -First 1
+          $portable = Join-Path $env:RUNNER_TEMP 'hc-portable'
+          Expand-Archive -Path $zip.FullName -DestinationPath $portable -Force
+          $env:HC_EXE = (Get-ChildItem $portable -Recurse -Filter Host-Caster.exe | Select-Object -First 1).FullName
+          $env:HC_SMOKE_LABEL = 'windows-portable'
+          node e2e/smoke.mjs
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Smoke test (macOS dmg)
+        if: runner.os == 'macOS'
+        working-directory: desktop
+        shell: bash
+        run: |
+          dmg="$(ls "$PWD"/.build/out/*.dmg)"
+          mnt="$RUNNER_TEMP/hc-dmg"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg"
+          test -L "$mnt/Applications"
+          cp -R "$mnt/Host-Caster.app" "$RUNNER_TEMP/"
+          hdiutil detach "$mnt"
+          app="$RUNNER_TEMP/Host-Caster.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          archs="$(lipo -archs "$app/Contents/MacOS/Host-Caster")"
+          echo "architectures: $archs"
+          [[ "$archs" == *x86_64* && "$archs" == *arm64* ]]
+          HC_EXE="$app/Contents/MacOS/Host-Caster" HC_SMOKE_LABEL=mac node e2e/smoke.mjs
+
+      - name: Smoke test screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ matrix.name }}
+          path: smoke/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          path: |
+            desktop/.build/out/*.AppImage
+            desktop/.build/out/*.deb
+            desktop/.build/out/*.exe
+            desktop/.build/out/*.zip
+            desktop/.build/out/*.dmg
+          if-no-files-found: error
+          retention-days: 14

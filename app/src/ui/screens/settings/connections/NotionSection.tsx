@@ -99,7 +99,7 @@ export function NotionSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.notion]);
 
-  // phone: the result arrives through hostcaster://notion
+  // phone and desktop app: the result arrives through hostcaster://notion
   useEffect(
     () =>
       notion.on('change', (e) => {

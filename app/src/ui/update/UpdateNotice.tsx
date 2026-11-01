@@ -1,20 +1,30 @@
-// "A new version is ready": only in the Android APK downloaded from the website (core/update/directUpdate.ts).
-// Download opens the new APK in the browser; Android's installer updates the app over this one, data kept.
+// "A new version is ready": in the Android APK downloaded from the website (core/update/directUpdate.ts) and in the
+// desktop app (its main process reads the site's desktop manifest, state/desktop.ts). Download opens the browser:
+// Android's installer or the desktop installer puts the new version over this one, data kept. Nothing installs by itself.
 import { useEffect, useId, useState } from 'react';
 import { App } from '@capacitor/app';
 import { Download } from 'lucide-react';
-import { distribution, isNative, onAppResume, openExternal, platform } from '@/core/native';
+import { desktop, distribution, isNative, onAppResume, openExternal, platform } from '@/core/native';
 import { checkForUpdate, snoozeUpdate, type ReleaseManifest, type UpdateDecision } from '@/core/update/directUpdate';
+import { snoozeDesktopUpdate, useDesktop } from '@/state/desktop';
 import { Button } from '../components';
 import './UpdateNotice.css';
 
 export const checksForUpdates = isNative && platform === 'android' && distribution === 'direct';
 
-/** Mount once (AppShell). Renders nothing outside a direct Android build. */
+// the versionCode put away in this session ("Later", "Not now" or Download); kept outside the component because the
+// shell mounts it again when the layout changes (sign-in screen to the app)
+let putAwayCode = 0;
+
+/** Mount once (AppShell). Renders nothing outside a direct Android build and the desktop app. */
 export function UpdateNotice() {
   const [decision, setDecision] = useState<UpdateDecision>({ kind: 'none' });
-  // the versionCode put away in this session ("Later", "Not now" or Download)
-  const [putAway, setPutAway] = useState(0);
+  const [putAway, setPutAwayState] = useState(putAwayCode);
+  const setPutAway = (code: number) => {
+    putAwayCode = code;
+    setPutAwayState(code);
+  };
+  const desktopUpdate = useDesktop((s) => s.update);
 
   useEffect(() => {
     if (!checksForUpdates) return;
@@ -39,6 +49,25 @@ export function UpdateNotice() {
     };
   }, []);
 
+  if (desktop && desktopUpdate) {
+    if (desktopUpdate.versionCode === putAway) return null;
+    const bridge = desktop;
+    return (
+      <UpdateCard
+        release={{ ...desktopUpdate, sha256: desktopUpdate.sha256 ?? '', minimumSupported: 0 }}
+        required={desktopUpdate.required}
+        hint="It opens the download page in your browser. Install it over this version: your stations, hosts and sign-in stay."
+        onDownload={() => {
+          void bridge.openUpdate();
+          setPutAway(desktopUpdate.versionCode);
+        }}
+        onLater={() => {
+          if (!desktopUpdate.required) void snoozeDesktopUpdate();
+          setPutAway(desktopUpdate.versionCode);
+        }}
+      />
+    );
+  }
   if (decision.kind === 'none' || decision.release.versionCode === putAway) return null;
   return (
     <UpdateCard
@@ -61,11 +90,13 @@ export function UpdateCard({
   required,
   onDownload,
   onLater,
+  hint = 'It opens in your browser. Install it over this app: your stations, hosts and settings stay.',
 }: {
   release: ReleaseManifest;
   required: boolean;
   onDownload: () => void;
   onLater: () => void;
+  hint?: string;
 }) {
   const titleId = useId();
   return (
@@ -89,7 +120,7 @@ export function UpdateCard({
             ))}
           </ul>
         )}
-        <p className="aw-update__hint">It opens in your browser. Install it over this app: your stations, hosts and settings stay.</p>
+        <p className="aw-update__hint">{hint}</p>
         <div className="aw-update__actions">
           <Button variant="primary" size="sm" icon={Download} onClick={onDownload}>
             Download

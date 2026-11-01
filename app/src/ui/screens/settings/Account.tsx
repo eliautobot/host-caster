@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Cloud, CloudOff, CreditCard, KeyRound, LogOut, MonitorSmartphone, RefreshCw, UserRound } from 'lucide-react';
-import { isNative, sellsPlans } from '@/core/native';
+import { isDesktop, isNative, sellsPlans } from '@/core/native';
 import { usePlan } from '@/state/plan';
 import { dateText, planName } from '../../online/parts';
 import { auth, request, sync } from '@/core/api';
@@ -278,7 +278,7 @@ export default function Account() {
         </SectionCard>
       )}
       {/* the hosted web app always talks to its own service */}
-      {(!onlineEd || isNative) && <ServerCard />}
+      {(!onlineEd || isNative || isDesktop) && <ServerCard />}
     </div>
   );
 }

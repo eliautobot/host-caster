@@ -1,5 +1,6 @@
 // App stores. Add a store: create state/<name>.ts with a start function and list it here.
 import { startBrainsStore } from './brains';
+import { startDesktopStore } from './desktop';
 import { startHostsStore } from './hosts';
 import { startLibraryStore } from './library';
 import { startPlayerStore } from './player';
@@ -24,6 +25,7 @@ export function startStores(): void {
     startPlayerStore,
     startRadioStore,
     startSessionStore,
+    startDesktopStore,
   ]) {
     start();
   }

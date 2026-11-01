@@ -1,0 +1,24 @@
+/* Settings -> Desktop app (desktop app only). */
+.aw-desktop-settings {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.aw-desktop-settings__cgpt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.aw-desktop-settings__cgpt svg {
+  width: 18px;
+  height: 18px;
+}
+
+.aw-desktop-settings__notes {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.5;
+}

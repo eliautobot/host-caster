@@ -1,0 +1,31 @@
+{
+  "name": "host-caster-desktop",
+  "productName": "Host-Caster",
+  "version": "0.1.2",
+  "description": "Host-Caster for Windows, Mac and Linux: your AI radio station",
+  "private": true,
+  "type": "module",
+  "main": "main/main.js",
+  "license": "AGPL-3.0-only",
+  "author": "Host-Caster",
+  "homepage": "https://host-caster.com",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:app": "scripts/build-app.sh",
+    "stage": "node scripts/stage.mjs",
+    "start": "electron .build/stage",
+    "dist:linux": "electron-builder --config electron-builder.config.cjs --linux --x64",
+    "dist:win": "electron-builder --config electron-builder.config.cjs --win --x64",
+    "dist:mac": "electron-builder --config electron-builder.config.cjs --mac --universal",
+    "manifest": "node scripts/manifest.mjs",
+    "test": "node --test test/*.test.js",
+    "e2e": "e2e/run-xvfb.sh",
+    "smoke": "node e2e/smoke.mjs"
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  }
+}

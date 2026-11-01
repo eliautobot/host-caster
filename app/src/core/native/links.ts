@@ -1,12 +1,17 @@
 // Sign-in in the system browser and the hostcaster:// deep links that bring the app back.
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
+import { desktop } from './desktop';
 import { isNative, platform } from './platform';
 
 export const APP_SCHEME = 'hostcaster';
 
-/** Native: in-app browser tab (Custom Tabs / SFSafariViewController). Web: same-window navigation. */
+/** Native: in-app browser tab (Custom Tabs / SFSafariViewController). Desktop: the system browser. Web: same-window navigation. */
 export async function openAuthUrl(url: string): Promise<void> {
+  if (desktop) {
+    await desktop.openExternal(url);
+    return;
+  }
   if (isNative) {
     await Browser.open({ url, presentationStyle: 'popover', toolbarColor: '#0a0a0b' });
     return;
@@ -38,7 +43,8 @@ export const isWebUrl = (url: string): boolean => /^https?:\/\/[^\s]+$/i.test(St
 
 export async function openExternal(url: string): Promise<void> {
   if (!isWebUrl(url)) return;
-  if (isNative) await Browser.open({ url, toolbarColor: '#0a0a0b' });
+  if (desktop) await desktop.openExternal(url);
+  else if (isNative) await Browser.open({ url, toolbarColor: '#0a0a0b' });
   else if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
 }
 
@@ -73,8 +79,16 @@ function deliver(url: string): void {
 }
 
 function start(): void {
-  if (started || !isNative) return;
+  if (started || (!isNative && !desktop)) return;
   started = true;
+  if (desktop) {
+    // the desktop app: links from the OS (sign-in, Stripe, the ChatGPT page), and the one that launched it
+    desktop.onDeepLink((url) => deliver(url));
+    void desktop.launchLinks().then((links) => {
+      for (const url of links) deliver(url);
+    });
+    return;
+  }
   void App.addListener('appUrlOpen', (e) => deliver(e.url));
   void App.getLaunchUrl().then((r) => {
     if (r?.url && r.url.startsWith(`${APP_SCHEME}:`)) deliver(r.url);

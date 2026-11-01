@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { isNative } from '@/core/native';
+import { isDesktop, isNative } from '@/core/native';
 import type { Brain, Draft } from '@/core/types';
 import { navigate } from '@/state/router';
 import { Button, Select, TextField } from '../../../components';
@@ -168,7 +168,11 @@ export function ChatGPTBrainForm({ cg, draft, set }: { cg: ChatGPTState; draft: 
 
   if (!cg.signedIn) return <SignInFirst />;
   if (!cg.serverOn || cg.status?.enabled === false) {
-    return <StatusLine tone="muted">This Host-Caster server has ChatGPT plan brains turned off.</StatusLine>;
+    return (
+      <StatusLine tone="muted">
+        {isDesktop ? 'ChatGPT plan brains are turned off on this computer (Settings, Desktop app).' : 'This Host-Caster server has ChatGPT plan brains turned off.'}
+      </StatusLine>
+    );
   }
   if (cg.loading && !cg.status) return <StatusLine tone="muted">Checking your ChatGPT connection...</StatusLine>;
 

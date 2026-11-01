@@ -2,7 +2,8 @@
 // or a pasted address finishes it), models, disconnect. Tokens never reach this device.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, chatgpt, type ChatGPTModel, type ChatGPTStart, type ChatGPTStatus } from '@/core/api';
-import { APP_SCHEME, isNative, loopback, openAuthUrl, type LoopbackListener } from '@/core/native';
+import { APP_SCHEME, isDesktop, isNative, loopback, openAuthUrl, type LoopbackListener } from '@/core/native';
+import { useDesktop } from '@/state/desktop';
 import { useSession } from '@/state/session';
 import { toast } from '../../../components';
 
@@ -18,8 +19,12 @@ export interface ChatGPTSignIn {
 }
 
 export function useChatGPT() {
-  const signedIn = useSession((s) => Boolean(s.session));
-  const serverOn = useSession((s) => s.config?.chatgptPlan !== false);
+  // the desktop app keeps the ChatGPT sign-in on this computer (its local helper): no Host-Caster sign-in needed for it,
+  // and it is on only when Settings, Desktop app says so
+  const signedIn = useSession((s) => Boolean(s.session)) || isDesktop;
+  const serverPlan = useSession((s) => s.config?.chatgptPlan !== false);
+  const desktopPlan = useDesktop((s) => s.settings?.chatgptPlan === true);
+  const serverOn = isDesktop ? desktopPlan : serverPlan;
   const [status, setStatus] = useState<ChatGPTStatus>();
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState<ChatGPTSignIn>();
@@ -72,7 +77,7 @@ export function useChatGPT() {
   /** Continue with ChatGPT. Opens the tab first (popup blockers allow it only inside the click). */
   const begin = useCallback(async (opts: { fresh?: boolean; reconsent?: boolean } = {}) => {
     setError(undefined);
-    const tab = isNative ? null : window.open('', '_blank');
+    const tab = isNative || isDesktop ? null : window.open('', '_blank');
     if (tab) tab.opener = null;
     try {
       // Android app: the answer comes back to this phone's 127.0.0.1, where the app listens and passes it on
@@ -81,9 +86,10 @@ export function useChatGPT() {
         listener.current = await loopback.listen((url) => void finishWith(url), `${api.config?.appScheme ?? APP_SCHEME}://chatgpt`);
       }
       const start = await chatgpt.start({ ...opts, ...(listener.current ? { loopbackPort: listener.current.port } : {}) });
-      if (isNative) await openAuthUrl(start.authorizeUrl);
+      // phones and the desktop app: the system browser (the desktop helper's own 127.0.0.1 catches the answer)
+      if (isNative || isDesktop) await openAuthUrl(start.authorizeUrl);
       else if (tab) tab.location.href = start.authorizeUrl;
-      setPending({ start, blocked: !isNative && !tab, local: Boolean(listener.current) });
+      setPending({ start, blocked: !isNative && !isDesktop && !tab, local: Boolean(listener.current) || (isDesktop && start.listening) });
     } catch (err) {
       tab?.close();
       stopListening();

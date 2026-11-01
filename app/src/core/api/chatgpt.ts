@@ -1,6 +1,13 @@
 // "Use your ChatGPT plan": the server holds the user's ChatGPT sign-in (tokens never come to this device) and runs
-// the requests. These calls connect, read the status, list models and disconnect.
+// the requests. These calls connect, read the status, list models and disconnect. In the desktop app the same calls go
+// to its local helper instead: the sign-in stays on that computer and the online server never sees it.
+import { isDesktop } from '../native/desktop';
 import { request } from './client';
+import { helperRequest } from './helper';
+
+function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  return isDesktop ? helperRequest<T>(method, path, body) : request<T>(method, path, body);
+}
 
 export const MANAGE_USAGE_URL = 'https://chatgpt.com/settings/usage';
 
@@ -37,17 +44,17 @@ export interface ChatGPTModel {
 }
 
 export const chatgpt = {
-  status: () => request<ChatGPTStatus>('GET', '/api/chatgpt/status'),
+  status: () => call<ChatGPTStatus>('GET', '/api/chatgpt/status'),
   /** fresh: a different ChatGPT account; reconsent: ask for plan use again; loopbackPort: this device listens */
   start: (opts: { fresh?: boolean; reconsent?: boolean; loopbackPort?: number } = {}) =>
-    request<ChatGPTStart>('POST', '/api/chatgpt/start', opts),
+    call<ChatGPTStart>('POST', '/api/chatgpt/start', opts),
   /** the address the ChatGPT tab ended on (http://127.0.0.1:.../auth/callback?code=...) */
-  finish: (url: string) => request<ChatGPTStatus>('POST', '/api/chatgpt/finish', { url }),
-  cancel: () => request<{ ok: boolean }>('POST', '/api/chatgpt/cancel', {}),
-  welcomed: () => request<{ ok: boolean }>('POST', '/api/chatgpt/welcome', {}),
-  models: () => request<{ models: ChatGPTModel[] }>('GET', '/api/chatgpt/models'),
+  finish: (url: string) => call<ChatGPTStatus>('POST', '/api/chatgpt/finish', { url }),
+  cancel: () => call<{ ok: boolean }>('POST', '/api/chatgpt/cancel', {}),
+  welcomed: () => call<{ ok: boolean }>('POST', '/api/chatgpt/welcome', {}),
+  models: () => call<{ models: ChatGPTModel[] }>('GET', '/api/chatgpt/models'),
   /** revoked = ChatGPT confirmed the sign-out */
-  disconnect: () => request<{ revoked: boolean }>('POST', '/api/chatgpt/disconnect', {}),
+  disconnect: () => call<{ revoked: boolean }>('POST', '/api/chatgpt/disconnect', {}),
 };
 
 /** Errors from a ChatGPT plan brain that the user can fix in ChatGPT settings. */

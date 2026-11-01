@@ -1,7 +1,7 @@
 // Notion connection (server routes in server/src/integrations/notion). The server keeps the token; the app picks what
 // the hosts may read and where they write, sends what the listener asked to add, and shows the activity log.
 import { kvDelete, kvGet, kvSet } from '../db/kv';
-import { isNative, onDeepLink, openAuthUrl } from '../native';
+import { isDesktop, isNative, onDeepLink, openAuthUrl } from '../native';
 import { createEmitter } from '../util/emitter';
 import { api, ApiError, request } from './client';
 import { usesBearer } from './auth';
@@ -156,11 +156,11 @@ export const notion = {
   status: () => request<NotionStatus>('GET', '/api/notion/status'),
 
   /**
-   * Opens Notion's own consent page. Web: this tab goes there and comes back to `returnTo`. Phone: the system
-   * browser, back through hostcaster://notion with a code only this app can finish.
+   * Opens Notion's own consent page. Web: this tab goes there and comes back to `returnTo`. Phone and desktop app:
+   * the system browser, back through hostcaster://notion with a code only this app can finish.
    */
   async connect(returnTo = '/settings/connections'): Promise<void> {
-    if (!isNative) {
+    if (!isNative && !isDesktop) {
       const { url } = await request<{ url: string }>('POST', '/api/notion/start', { return: returnTo });
       if (usesBearer()) window.open(url, '_blank', 'noopener');
       else window.location.assign(url);

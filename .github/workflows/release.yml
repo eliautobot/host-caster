@@ -2,15 +2,17 @@
 #   - the Android APK: signed when the repository has the signing secrets below, otherwise an unsigned release APK
 #     (sign it yourself) plus a debug APK you can install to try it,
 #   - the web app as a zip (any static host, or APP_DIST of a server),
-#   - SHA-256 checksums.
+#   - the desktop apps (desktop.yml, built and smoke-tested on each system's own runner): the Windows installer and
+#     portable zip, the macOS universal dmg, the Linux AppImage and .deb. Unsigned unless the signing secrets listed in
+#     desktop.yml exist (docs/DESKTOP.md says what people see when they open an unsigned build),
+#   - SHA-256 checksums of every file (SHA256SUMS.txt).
 # The Docker image for the same tag is published by docker.yml.
 #
 # Android signing secrets (Settings, Secrets and variables, Actions), all four or none:
 #   ANDROID_KEYSTORE_BASE64   base64 of the .jks/.keystore file
 #   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
-# Optional repository variable: HOSTCASTER_SERVER, the server the phone app uses until someone picks another one.
-#
-# Desktop builds (Windows, macOS, Linux) slot in as more jobs that upload to the same release: see the desktop job.
+# Optional repository variable: HOSTCASTER_SERVER, the server the phone and desktop apps use until someone picks
+# another one.
 name: Release
 
 on:
@@ -134,27 +136,43 @@ jobs:
           name: android
           path: out/*.apk
 
-  # Desktop apps: add a job per platform (for example an Electron build on windows-latest, macos-latest and
-  # ubuntu-latest) that uploads its installers as an artifact named desktop-<platform>; the publish job picks up every
-  # artifact. Kept off until the desktop app is part of this repository.
+  # Desktop apps: Windows, macOS and Linux builds with a launch smoke test on each (artifacts desktop-<system>)
   desktop:
-    name: Desktop apps (not yet)
-    if: false
+    name: Desktop apps
     needs: check
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "desktop builds go here"
+    uses: ./.github/workflows/desktop.yml
+    with:
+      ref: ${{ github.event.inputs.tag || github.ref_name }}
+    secrets: inherit
 
   publish:
     name: Publish the release
-    needs: [check, android]
+    needs: [check, android, desktop]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
+      # the files that go out (not the smoke test screenshots)
       - uses: actions/download-artifact@v4
         with:
+          name: web
+          path: assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: assets
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
           path: assets
           merge-multiple: true
+      - name: Every expected file is there
+        working-directory: assets
+        run: |
+          ls -l
+          for f in "host-caster-web-${TAG}.zip" "Host-Caster-Setup-${TAG#v}-x64.exe" "Host-Caster-${TAG#v}-win-x64.zip" \
+                   "Host-Caster-${TAG#v}-mac-universal.dmg" "Host-Caster-${TAG#v}-linux-x86_64.AppImage" "Host-Caster-${TAG#v}-linux-amd64.deb"; do
+            [ -s "$f" ] || { echo "missing $f"; exit 1; }
+          done
       - name: Checksums
         working-directory: assets
         run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt

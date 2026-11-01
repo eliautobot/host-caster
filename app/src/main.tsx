@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api } from '@/core/api';
 import { getSettings, initDb } from '@/core/db';
-import { isNative, startNativeShell } from '@/core/native';
+import { isDesktop, isNative, startNativeShell } from '@/core/native';
 import { captureSpotifyRedirect } from '@/core/services/spotify/redirect';
 import { startStores } from '@/state';
 import { App, BootError } from './App';
@@ -38,7 +38,8 @@ async function boot() {
 
 void boot();
 
-if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {
+// the desktop app has its files inside; no service worker there
+if (import.meta.env.PROD && !isNative && !isDesktop && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((err: unknown) => console.warn('[hostcaster] sw', err));
   });
