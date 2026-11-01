@@ -4,6 +4,7 @@ import { lifeEventInfo } from '../context/life';
 import type { BreakLine, ContextPacket, Host, PartOfDay, Station } from '../types';
 import * as B from './builtinLines';
 import { FUN_FACTS } from './facts';
+import { notionSpoken } from './notionAsk';
 import { factFor, noteKey, requestIsNext, type BreakPlan } from './planner';
 import { emailSpoken, eventSpoken, greetingFor, PART_OF_DAY_WORDS, fitsPartOfDay, spokenTime, whenSpoken } from './speakable';
 
@@ -12,6 +13,24 @@ type Vars = Record<string, string | number | undefined>;
 /** "Call the pharmacy" -> "call the pharmacy" inside a sentence (acronyms like "DMV" stay). */
 export function lowerFirst(s: string): string {
   return /^[A-Z][a-z]/.test(s) ? s[0]!.toLowerCase() + s.slice(1) : s;
+}
+
+/**
+ * A Notion page's note (context/notion notionNoteText: `Your Notion page "T", edited ..., says: <summary>`) as the
+ * scripted hosts say it: the page and its first two items, not the whole summary with its dates and statuses.
+ */
+export function notionNoteSpoken(note: string): { page: string; what: string } | undefined {
+  const m = /^Your Notion page "(.+?)"(?:, edited [^,]+,)? says: ([\s\S]*)$/.exec(note);
+  if (!m) return undefined;
+  const body = m[2]!.replace(/\s*\([^()]*\)/g, '').trim();
+  const head = /^([^:;.]{1,40}):\s*/.exec(body);
+  const rest = (head ? body.slice(head[0].length) : body).split(/\.(?:\s|$)/)[0]!.trim();
+  const items = rest.split(/;\s*/).map((x) => x.trim()).filter(Boolean);
+  if (!items.length) return undefined;
+  const clip = (x: string) => (x.length > 80 ? `${x.slice(0, 77).trim()}...` : x);
+  const picked = items.slice(0, 2).map(clip).join(' and ');
+  const more = items.length > 2 ? `, plus ${items.length - 2} more` : '';
+  return { page: m[1]!, what: `${head ? `${lowerFirst(head[1]!)}: ` : ''}${picked}${more}` };
 }
 
 export function fill(template: string, vars: Vars): string {
@@ -105,7 +124,9 @@ function topicBeat(c: Composer, item: BreakPlan['items'][number], plan: BreakPla
     }
     case 'notes': {
       const n = packet.notes?.find((x) => noteKey(x) === item.key);
-      return n ? t(c.pick(B.NOTE, { note: n.replace(/[.!?]+$/, '') })) : undefined;
+      if (!n) return undefined;
+      const page = notionNoteSpoken(n);
+      return t(page ? c.pick(B.NOTION_NOTE, page) : c.pick(B.NOTE, { note: n.replace(/[.!?]+$/, '') }));
     }
     case 'reminders': {
       const r = packet.reminders?.find((x) => `reminders:${x.id}` === item.key);
@@ -140,7 +161,7 @@ export function writeBuiltinBreak(
   const now = opts.now ?? Date.parse(packet.now.iso);
   const lead = hosts[0];
   if (!lead) return [];
-  const c = new Composer(rand, packet.recentBreaks.flatMap((b) => b.lines.map((l) => l.text)).join(' '));
+  const c = new Composer(rand, packet.recentBreaks.slice(0, 8).flatMap((b) => b.lines.map((l) => l.text)).join(' '));
   const vars = { station: station.name, freq: station.frequency, host: lead.name, cohost: hosts[1]?.name, greeting: greetingFor(packet.now.partOfDay) };
 
   const beats: Beat[] = [];
@@ -149,7 +170,8 @@ export function writeBuiltinBreak(
     if (hosts.length > 1) text += ` ${c.pick(B.OPENING_DUO, vars)}`;
     beats.push({ kind: 'opening', text });
   }
-  if (plan.callIn) beats.push(...callInBeats(c, plan.request ? '' : plan.callIn, packet, now));
+  if (plan.callIn) beats.push(...callInBeats(c, plan.request || plan.notion ? '' : plan.callIn, packet, now));
+  if (plan.notion) beats.push({ kind: 'callin', text: notionSpoken(plan.notion, (bank, vars) => c.pick(bank, vars), plan.kind) });
   if (plan.request) {
     const r = plan.request;
     const from = plan.requestFrom === 'app' ? B.REQUEST_APP_LEAD : B.REQUEST_LEAD;

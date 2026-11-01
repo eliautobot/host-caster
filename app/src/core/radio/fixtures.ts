@@ -55,3 +55,6 @@ export function pastBreak(topics: string[], minutesAgo: number, text = 'Hello th
     topics,
   };
 }
+
+/** A rundown aired five minutes ago (same hour as NOW): the next regular break is an ordinary one. */
+export const settled = (): Break[] => [pastBreak(['rundown'], 5)];

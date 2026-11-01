@@ -10,6 +10,7 @@ import { Button, IconButton, Toggle } from '../../../components';
 import { useIsDesktop } from '../../../hooks/useMediaQuery';
 import { GoogleMark } from '../account/marks';
 import { Actions, Hint, SectionCard, errorText } from '../account/parts';
+import { emailOnForStations } from './emailOn';
 
 interface Service {
   id: GoogleService;
@@ -77,7 +78,7 @@ export function GoogleSection() {
   useEffect(() => {
     if (!ready || !query.enable || !identity) return;
     const svc = SERVICES.find((s) => s.id === query.enable);
-    if (svc && granted.has(svc.id) && !svc.get(connections)) void update({ connections: svc.set(connections, true) });
+    if (svc && granted.has(svc.id) && !svc.get(connections)) void update({ connections: svc.set(connections, true) }).then(() => (svc.id === 'gmail' ? emailOnForStations() : undefined));
     navigate('/settings/connections', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, query.enable, identity?.scopes.join()]);
@@ -96,6 +97,7 @@ export function GoogleSection() {
       return;
     }
     await update({ connections: svc.set(connections, on) });
+    if (on && svc.id === 'gmail') await emailOnForStations();
   };
 
   const check = async (svc: Service) => {

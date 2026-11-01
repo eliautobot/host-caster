@@ -175,6 +175,8 @@ export interface Station extends BaseRecord {
   talkEvery: number;
   /** ~1-2 / 3-4 / 5-8 lines total */
   talkLength: TalkLength;
+  /** 0 = mostly the music .. 4 = mostly the listener's day; missing = DEFAULT_TALK_MIX (core/radio/planner.ts) */
+  talkMix?: number;
   segments: StationSegments;
   talkOverIntro: boolean;
   /** 0..1 music volume under voice, default 0.18 */
@@ -338,14 +340,19 @@ export interface Connections {
   weather?: { enabled: boolean };
   calendar?: { google: boolean; icsUrls: string[] };
   email?: { gmail: boolean; imap: boolean };
-  /** feeds = news feeds every station can use (stations also have their own newsFeeds) */
-  news?: { enabled: boolean; feeds?: string[] };
+  /**
+   * Account news. feeds = the listener's own list (missing = the default feeds of `region`, or of the region guessed
+   * from the device). Stations with no newsFeeds of their own use these (core/context/news.ts).
+   */
+  news?: { enabled: boolean; feeds?: string[]; region?: string };
   /** clientId = the user's own Spotify app (tokens live in kv 'spotify:tokens') */
   spotify?: { connected: boolean; clientId?: string; displayName?: string };
   youtube?: { connected: boolean };
   subsonic?: { url: string; username: string; secretRef?: string };
   anyApp?: { enabled: boolean };
   aiApps?: { enabled: boolean };
+  /** Notion linked on the server (hosts read the pages chosen there and add notes when asked) */
+  notion?: { connected: boolean };
 }
 
 export interface Settings extends BaseRecord {

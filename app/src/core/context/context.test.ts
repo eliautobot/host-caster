@@ -145,7 +145,8 @@ describe('cache + buildContext', () => {
       new Response(JSON.stringify({ current: { temperature_2m: 18, apparent_temperature: 17, weather_code: 0 }, daily: { temperature_2m_max: [21], temperature_2m_min: [14], precipitation_probability_max: [0] } })),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const station: Station = { ...STARTER_STATION, createdAt: 0, updatedAt: 0, segments: { ...defaultSegments(), notes: false } };
+    // news has its own test below (default feeds would be fetched here too)
+    const station: Station = { ...STARTER_STATION, createdAt: 0, updatedAt: 0, segments: { ...defaultSegments(), notes: false, news: false } };
     const p = await buildContext(station, { songBefore: { id: 't', title: 'Dreams', artist: 'Fleetwood Mac', album: '', durationMs: 1, source: 'local' } }, { now: NOW });
     expect(p.listener.callMe).toBe('Sam');
     expect(p.weather).toMatchObject({ place: 'Lisbon', temperature: 18, condition: 'clear skies' });

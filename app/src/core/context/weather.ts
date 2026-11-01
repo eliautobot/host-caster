@@ -73,10 +73,12 @@ export async function fetchWeather(place: GeoPlace, units: Units): Promise<Weath
   return parseForecast(place.name, units, (await res.json()) as ForecastResponse, Date.now());
 }
 
+/** The kv cache key of a place's weather. */
+export const weatherKey = (place: GeoPlace, units: Units) => `weather:${place.lat.toFixed(2)},${place.lon.toFixed(2)}:${units}`;
+
 /** Weather for the listener's place, cached 20 min, last snapshot when offline. */
 export async function getWeather(place: GeoPlace, units: Units): Promise<WeatherSnapshot | undefined> {
-  const key = `weather:${place.lat.toFixed(2)},${place.lon.toFixed(2)}:${units}`;
-  const c = await cached(key, 20 * 60_000, () => fetchWeather(place, units));
+  const c = await cached(weatherKey(place, units), 20 * 60_000, () => fetchWeather(place, units));
   // an old snapshot is still useful for a few hours ("it was raining earlier"), not for days
   if (!c.value || Date.now() - c.value.fetchedAt > 6 * 3600_000) return undefined;
   return c.value;

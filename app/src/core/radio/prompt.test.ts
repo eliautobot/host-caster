@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { hosts, NOW, packet, pastBreak, station } from './fixtures';
+import { hosts, NOW, packet, pastBreak, settled, station } from './fixtures';
 import { planBreak } from './planner';
 import { buildScriptPrompt, buildTurnPrompt, factsSheet, scriptMaxTokens } from './prompt';
 
-const plan = (p = packet()) => planBreak(station({ talkLength: 'long' }), p, [], { now: NOW, rand: () => 0 });
+/** a music-first station (talk mix 0) back-announces every song: both song names in FACTS */
+const plan = (p = packet()) => planBreak(station({ talkLength: 'long', talkMix: 0 }), p, [...p.recentBreaks, ...settled()], { now: NOW, rand: () => 0 });
 
 describe('prompt builder', () => {
   it('writes the radio voice rules, personas and the avoid list', () => {
@@ -30,7 +31,7 @@ describe('prompt builder', () => {
   it('keeps email privacy-light: sender name and gist, no address or numbers', () => {
     const p = packet({ reminders: [], calendar: [], lifeEvents: [], news: [], notes: [] });
     const seg = { ...station().segments, email: true, time: false, weather: false, funFacts: false };
-    const pl = planBreak(station({ segments: seg }), p, [], { now: NOW, rand: () => 0 });
+    const pl = planBreak(station({ segments: seg }), p, settled(), { now: NOW, rand: () => 0 });
     const facts = factsSheet(pl, p, station());
     expect(facts).toContain('EMAIL: a message from Ana Costa about Saturday brunch plans');
     expect(facts).not.toContain('ana@example.com');
@@ -60,7 +61,7 @@ describe('prompt builder', () => {
   it('says the time in words and forbids made-up plans when FACTS has none', () => {
     const p = packet({ reminders: [], calendar: [], lifeEvents: [], news: [], notes: [], email: [] });
     const seg = { ...station().segments, calendar: false, reminders: false, email: false, notes: false, lifeEvents: false };
-    const pl = planBreak(station({ segments: seg }), p, [], { now: NOW, rand: () => 0 });
+    const pl = planBreak(station({ segments: seg }), p, settled(), { now: NOW, rand: () => 0 });
     const prompt = buildScriptPrompt(station({ segments: seg }), hosts(2), pl, p);
     expect(prompt.user).toMatch(/SAY THE TIME AS: "[a-z' -]+"/);
     expect(prompt.system).toMatch(/do not mention reminders, appointments, plans/);

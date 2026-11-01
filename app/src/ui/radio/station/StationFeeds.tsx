@@ -1,7 +1,9 @@
 // News feeds of a station: RSS/Atom URLs the hosts read headlines from.
 import { useState } from 'react';
-import { Newspaper, Plus, X } from 'lucide-react';
-import { fetchText, parseFeed } from '@/core/context';
+import { ArrowRight, Newspaper, Plus, X } from 'lucide-react';
+import { feedName, fetchText, newsRegion, parseFeed } from '@/core/context';
+import { useAccountNews } from '@/state/news';
+import { navigate } from '@/state/router';
 import { Button, Chip, IconButton, TextField } from '../../components';
 import { StatusLine } from '../form';
 import './station.css';
@@ -49,8 +51,29 @@ export function StationFeeds({ feeds, onChange, newsOn }: { feeds: string[]; onC
   };
 
   const open = SUGGESTED.filter((s) => !feeds.includes(s.url));
+  const account = useAccountNews();
+  const names = account.feeds.map(feedName);
+  const listed = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
   return (
     <div className="aw-feeds">
+      {feeds.length === 0 && (
+        <div className="aw-entry aw-feeds__account">
+          <span className="aw-preset__icon">
+            <Newspaper aria-hidden />
+          </span>
+          <div className="aw-entry__text">
+            <p className="aw-entry__title">{account.enabled ? 'Your news from Settings' : 'News is off in Settings'}</p>
+            <p className="aw-entry__meta">
+              {account.enabled
+                ? `${listed || 'No feeds yet'}${account.custom ? '' : ` (${newsRegion(account.region)?.label ?? 'World'})`}`
+                : 'Turn it on in Connections to hear headlines.'}
+            </p>
+          </div>
+          <Button size="sm" variant="ghost" icon={ArrowRight} onClick={() => navigate('/settings/connections?show=news')}>
+            Change
+          </Button>
+        </div>
+      )}
       {feeds.map((f) => (
         <div key={f} className="aw-entry">
           <span className="aw-preset__icon">
@@ -93,7 +116,8 @@ export function StationFeeds({ feeds, onChange, newsOn }: { feeds: string[]; onC
         </div>
       )}
       {status && <StatusLine tone={status.tone}>{status.text}</StatusLine>}
-      {!newsOn && feeds.length > 0 && <p className="aw-field__hint">Turn on News under “What they talk about” to hear these.</p>}
+      {!newsOn && <p className="aw-field__hint">Turn on News under “What they talk about” to hear headlines on this station.</p>}
+      {newsOn && feeds.length === 0 && <p className="aw-field__hint">Add a feed here only if this station should have its own news.</p>}
     </div>
   );
 }

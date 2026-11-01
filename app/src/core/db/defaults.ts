@@ -58,7 +58,8 @@ export function defaultSegments(): StationSegments {
     time: true,
     weather: true,
     calendar: true,
-    email: false,
+    // only airs once a mailbox is connected (connecting one also switches it on for every station)
+    email: true,
     news: true,
     lifeEvents: true,
     notes: true,

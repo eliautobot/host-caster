@@ -29,7 +29,7 @@ YouTube with your own Google sign-in: [YOUTUBE.md](YOUTUBE.md). Your ChatGPT pla
 7. [Email and password accounts](#7-email-and-password-accounts)
 8. [Phone apps and your server](#8-phone-apps-and-your-server)
 9. [Music library on the server](#9-music-library-on-the-server)
-10. [AI apps (ChatGPT, Claude, Grok, Meta AI)](#10-ai-apps)
+10. [AI apps (ChatGPT, Claude, Grok, Meta AI) and Notion](#10-ai-apps)
 11. [Backups, updates and moving](#11-backups-updates-and-moving)
 12. [Security notes](#12-security-notes)
 13. [Troubleshooting](#13-troubleshooting)
@@ -101,6 +101,7 @@ All settings are environment variables (or lines in `.env`). Only `PUBLIC_URL` m
 | `SECRET_KEY` | generated | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts saved keys, OAuth tokens and mailbox passwords. When empty, one is generated into `DATA_DIR/secret.key` on first start. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | Google sign-in plus calendar, Gmail and YouTube (section 5). |
 | `X_CLIENT_ID`, `X_CLIENT_SECRET` | empty | X sign-in (section 6). |
+| `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET` | empty | People connect their Notion: the hosts read pages they pick and add notes when asked (section 10, Notion). |
 | `ALLOW_LOCAL_ACCOUNTS` | on only without Google and X | Email and password accounts. |
 | `ALLOW_SIGNUPS` | `true` | `false` stops new accounts; existing ones still sign in. |
 | `SESSION_DAYS` | `60` | How long a sign-in lasts without use. Every visit extends it. |
@@ -242,6 +243,30 @@ an assistant that supports remote MCP servers (Streamable HTTP, no authenticatio
 The assistant can see what is playing, list the hosts, send a note, queue a segment, request a song and add a
 birthday or date. Items land in the account's inbox and the hosts use them in the next break. The URL is the key:
 delete the connection to cut it off. These apps connect from the internet, so this needs a public https address.
+
+### Notion
+
+With a Notion connection on your server, everyone with an account taps **Connect Notion** in Settings, Connections
+and picks pages on Notion's own screen. Their hosts then mention open to-dos and notes from the pages they choose, and
+add a to-do or a note when they ask on a call ("add oat milk to my list") or from their AI app. One connection serves
+everyone; nobody else needs a key.
+
+1. In Notion open **Settings, Connections, Develop or manage connections** (or
+   [app.notion.com/developers/connections](https://app.notion.com/developers/connections)) and create a new
+   connection. Type: **Public** (OAuth). Name it, for example Host-Caster; a logo is optional.
+2. Capabilities: **Read content**, **Update content** and **Insert content**. Comments: none. User information:
+   **No user information**.
+3. OAuth redirect URI: `PUBLIC_URL` + `/auth/notion/callback`, for example
+   `https://radio.example.com/auth/notion/callback`. Notion takes plain http only for `localhost`.
+4. Notion asks a public connection for a website, privacy policy and terms of use: link pages about your server.
+5. Copy the **OAuth client ID** and **OAuth client secret** into `.env` as `NOTION_CLIENT_ID` and
+   `NOTION_CLIENT_SECRET`, restart.
+
+Without them the Notion card says the server owner has not set Notion up. What the server keeps: each person's Notion
+token (encrypted with `SECRET_KEY`), their choices, and the list of what the hosts added (for Undo). Page summaries
+stay in memory for 10 minutes. Hosts write at most 30 notes an hour per person, never change or delete people's own
+blocks, and Undo moves only the block they added to Notion's trash. Disconnect revokes the token. `NOTION_VERSION`
+(default `2026-03-11`) pins Notion's API version.
 
 ## 11. Backups, updates and moving
 

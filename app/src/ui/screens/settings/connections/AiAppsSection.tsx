@@ -67,7 +67,7 @@ export function AiAppsSection() {
 
   if (!session) {
     return (
-      <SectionCard icon={Bot} title="AI apps" status="ChatGPT, Claude, Grok and other assistants">
+      <SectionCard id="ai-apps" icon={Bot} title="AI apps" status="ChatGPT, Claude, Grok and other assistants">
         <p className="aw-acct-desc">Let your AI assistant send notes and segments to your hosts. Needs an account on your Host-Caster server.</p>
         <Actions>
           <Button icon={LogIn} onClick={() => navigate('/sign-in')}>
@@ -91,6 +91,7 @@ export function AiAppsSection() {
 
   return (
     <SectionCard
+      id="ai-apps"
       icon={Bot}
       tone={items.length ? 'ok' : 'neutral'}
       title="AI apps"

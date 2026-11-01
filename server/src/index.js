@@ -14,6 +14,7 @@ import { openDb } from './db.js';
 import { errorHandler } from './errors.js';
 import { googleRoutes } from './integrations/google.js';
 import { defaultImapFactory, imapRoutes } from './integrations/imap.js';
+import { notionRoutes } from './integrations/notion/routes.js';
 import { libraryRoutes } from './library/routes.js';
 import { mcpRoutes } from './mcp/server.js';
 import { makePolicy } from './net/egress.js';
@@ -140,6 +141,7 @@ export async function createServer(config = loadConfig(), opts = {}) {
   await app.register(fetchRoutes);
   await app.register(googleRoutes);
   await app.register(imapRoutes);
+  await app.register(notionRoutes);
   await app.register(libraryRoutes);
   await app.register(inboxRoutes);
   await app.register(reportRoutes);

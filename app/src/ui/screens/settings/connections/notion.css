@@ -1,0 +1,101 @@
+/* Notion card and its page picker (class prefix aw-notion-). Rows reuse the aw-acct-row look. */
+
+.aw-notion-log {
+  display: grid;
+  gap: var(--space-2);
+}
+.aw-notion-log__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-2);
+}
+.aw-notion-empty {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.aw-notion-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+.aw-notion-act[data-status='undone'] .aw-acct-row__title {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+.aw-notion-act[data-status='failed'] .aw-acct-row__icon {
+  color: var(--danger);
+}
+.aw-btn.aw-notion-off {
+  color: var(--danger);
+}
+
+.aw-notion-picker {
+  display: grid;
+  gap: var(--space-3);
+}
+.aw-notion-picker__list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.aw-notion-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.aw-notion-item:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.aw-notion-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.aw-notion-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.aw-notion-item--on {
+  background: var(--accent-soft);
+}
+.aw-notion-emoji {
+  font-size: 17px;
+  line-height: 1;
+}
+.aw-notion-check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid var(--text-3);
+  color: #fff;
+}
+.aw-notion-check--round {
+  border-radius: 50%;
+}
+.aw-notion-item--on .aw-notion-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.aw-notion-check svg {
+  width: 15px;
+  height: 15px;
+}

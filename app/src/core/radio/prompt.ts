@@ -2,7 +2,8 @@
 // and outros, hosts talking to each other, persona + avoid list, no repeats of recent breaks.
 import type { BreakLine, ContextPacket, Host, Station, TalkLength } from '../types';
 import { lifeEventInfo } from '../context/life';
-import { factFor, noteKey, requestIsNext, type BreakPlan } from './planner';
+import { notionFact, notionTask } from './notionAsk';
+import { DAY_SEGMENTS, factFor, noteKey, requestIsNext, type BreakPlan } from './planner';
 import { clockTime, emailSpoken, eventSpoken, fitsPartOfDay, PART_OF_DAY_WORDS, spokenTime, weatherSpoken, whenSpoken } from './speakable';
 
 const LEVEL = ['very low', 'low', 'medium', 'high', 'very high'];
@@ -32,6 +33,15 @@ export function hostCard(h: Host, role: 'lead' | 'co-host'): string {
 
 const PERSONAL = new Set(['calendar', 'reminders', 'email', 'notes', 'lifeEvents', 'inbox']);
 
+/** How much the songs get at each talk mix step (core/radio/planner.ts). */
+const MIX_SONGS = [
+  'This is a music-first show: the songs are the main thing to talk about.',
+  '',
+  'Keep the song talk short: the listener tuned in for their day as much as the music.',
+  "Keep the song talk to one short sentence (title and artist); spend the rest of the break on the listener's day.",
+  "The listener's day comes first: the song gets one short sentence, title and artist only.",
+];
+
 const RULES = (packet: ContextPacket, words: number, plan?: BreakPlan) =>
   [
     'This is spoken audio, read aloud by a voice engine. Write how people talk on the radio: short sentences, contractions, natural rhythm.',
@@ -48,7 +58,7 @@ const RULES = (packet: ContextPacket, words: number, plan?: BreakPlan) =>
     'Email: say only who it is from and the gist in a few words. Never read addresses, numbers, codes or private details.',
     'When there are two or more hosts, they talk to each other by name, react to what was just said and hand off naturally, like a real morning show.',
     `Talk to one listener${packet.listener.callMe ? `, ${packet.listener.callMe}` : ''}, warmly. Use their name at most once per break.`,
-    'Do not repeat lines, jokes or openers from RECENT BREAKS. Sound fresh every time.',
+    'Do not repeat lines, jokes or openers from RECENT BREAKS, and never take facts from them: their times are out of date. Facts come only from FACTS. Sound fresh every time.',
     `Keep every line under ${words} words.`,
     'Say each fact once per break: never repeat what another host already said.',
     'Never open or close a break with the same words as a recent break.',
@@ -70,6 +80,7 @@ function topicFacts(plan: BreakPlan, packet: ContextPacket, now: number): string
       case 'calendar': {
         const e = packet.calendar?.find((x) => `calendar:${x.id}` === item.key);
         if (e) out.push(`CALENDAR: ${eventSpoken(e, now)}${e.location ? ` (at ${e.location})` : ''}.`);
+        if (plan.rundown || item !== plan.items.find((i) => i.segment === 'calendar')) break;
         const more = (packet.calendar ?? []).filter((x) => x !== e).slice(0, 2);
         if (more.length) out.push(`ALSO ON THE CALENDAR (only if it fits): ${more.map((x) => eventSpoken(x, now)).join('; ')}.`);
         break;
@@ -143,6 +154,7 @@ export function factsSheet(plan: BreakPlan, packet: ContextPacket, station: Stat
       : plan.request
         ? `SONG REQUEST ${plan.requestFrom === 'app' ? "from the listener's AI assistant" : 'from the listener'}: ${q(plan.request.query)}. It is NOT in their music library, so it cannot play. Say so kindly; they can add it to their library.`
         : '',
+    notionFact(plan),
     ...topicFacts(plan, packet, now),
   ];
   return lines.filter(Boolean).join('\n');
@@ -168,10 +180,18 @@ function avoidList(hosts: Host[], packet: ContextPacket): string[] {
 
 function recentSheet(packet: ContextPacket, hosts: Host[]): string {
   const names = new Map(hosts.map((h) => [h.id, h.name]));
-  // whole breaks (the openers and the song intros are what repeats most), newest first
-  const lines = packet.recentBreaks
-    .slice(0, 3)
-    .flatMap((b) => b.lines.slice(0, 6).map((l) => `${names.get(l.hostId) ?? 'Host'}: ${l.text.slice(0, 160)}`));
+  // the openers and the song intros are what repeats most; the rest of a break holds its facts, and a small model
+  // reads those back later with times that are out of date ("the stand-up in eight minutes", an hour on): only the
+  // opening sentence and the closing one are shown
+  const sentences = (t: string) => t.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const lines = packet.recentBreaks.slice(0, 3).flatMap((b) => {
+    const first = b.lines[0];
+    const last = b.lines.length > 1 ? b.lines[b.lines.length - 1] : undefined;
+    return [
+      first && `${names.get(first.hostId) ?? 'Host'}: ${(sentences(first.text)[0] ?? '').slice(0, 140)}`,
+      last && `${names.get(last.hostId) ?? 'Host'}: ${(sentences(last.text).at(-1) ?? '').slice(0, 140)}`,
+    ].filter((x): x is string => Boolean(x));
+  });
   return lines.length ? lines.join('\n') : '(none yet: this is the first break of the show)';
 }
 
@@ -180,12 +200,23 @@ function task(plan: BreakPlan, hosts: Host[], packet: ContextPacket): string {
   const found = plan.request?.found;
   const next = requestIsNext(plan, packet);
   if (plan.kind === 'opening') parts.push('This is the first break of the show: welcome the listener and say the station name once.');
+  if (plan.rundown) {
+    parts.push(
+      `${plan.kind === 'opening' ? 'Then give' : 'This is the top-of-the-hour rundown: give'} a quick rundown of the listener's day from FACTS, in this order: ${plan.items.map((i) => i.segment).join(', ')}. One short sentence per item, soonest first.`,
+    );
+  }
   if (plan.callIn) {
     const answer = found ? (next ? ' Say yes to their request, but keep its name for the last line.' : ' Say yes and name their song, once.') : '';
     parts.push(`The listener just called in and said: ${q(plan.callIn)}. Answer them on air first, warmly and directly.${answer} If they ask for something you cannot do, say so kindly.`);
   }
-  if (plan.outro) parts.push('Say what just played (title and artist), the way a DJ does after a song.');
-  if (plan.items.length) parts.push(`Then talk about: ${plan.items.map((i) => i.segment).join(', ')} (use the matching FACTS).`);
+  if (plan.notion) parts.push(notionTask(plan));
+  if (plan.outro) parts.push(plan.mix >= 2 ? 'Name what just played (title and artist) in a few words.' : 'Say what just played (title and artist), the way a DJ does after a song.');
+  if (plan.items.length && !plan.rundown) {
+    const day = plan.items.some((i) => DAY_SEGMENTS.has(i.segment));
+    parts.push(`Then talk about: ${plan.items.map((i) => i.segment).join(', ')} (use the matching FACTS)${day && plan.mix >= 2 ? '; this is the heart of the break' : ''}.`);
+  }
+  if (plan.mix >= 2 && (plan.intro || plan.outro)) parts.push(MIX_SONGS[plan.mix]!);
+  else if (plan.mix === 0 && plan.intro) parts.push(MIX_SONGS[0]!);
   if (found && !plan.intro && plan.kind !== 'callin') parts.push('End by introducing their request, so it can start right after this break.');
   else if (plan.intro) parts.push(next ? 'End by introducing their request as the next song, so it can start right after the last line.' : 'End by introducing the next song, so it can start right after the last line.');
   else if (plan.kind === 'callin') parts.push(found ? 'Then hand back to the music (their song was already named: do not name it again).' : 'Then hand back to the music.');
@@ -214,7 +245,7 @@ export function buildScriptPrompt(station: Station, lineup: Host[], plan: BreakP
     .join('\n\n');
   const user = [
     `FACTS:\n${factsSheet(plan, packet, station)}`,
-    `RECENT BREAKS (do not repeat):\n${recentSheet(packet, hosts)}`,
+    `RECENT BREAKS (already on air, out of date: do not repeat them or reuse their facts):\n${recentSheet(packet, hosts)}`,
     `TASK: Write ${plan.lines} lines. ${task(plan, hosts, packet)}`,
   ].join('\n\n');
   return { system, user };
@@ -248,7 +279,7 @@ export function buildTurnPrompt(
   const said = transcript.map((l) => `${names.get(l.hostId) ?? 'Host'}: ${l.text}`).join('\n');
   const user = [
     `FACTS:\n${factsSheet(plan, packet, station)}`,
-    `RECENT BREAKS (do not repeat):\n${recentSheet(packet, hosts)}`,
+    `RECENT BREAKS (already on air, out of date: do not repeat them or reuse their facts):\n${recentSheet(packet, hosts)}`,
     `THE BREAK PLAN: ${task(plan, hosts, packet)}`,
     said ? `SO FAR IN THIS BREAK:\n${said}` : 'You open the break.',
     `Write line ${turn + 1} of ${plan.lines}${last ? ' (the last line' + (plan.intro ? ': introduce the next song' : '') + ')' : ''}. Reply to what was just said if anything was.${requestTurnNote(plan, packet, turn, last)}`,

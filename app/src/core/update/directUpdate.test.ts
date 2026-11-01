@@ -114,7 +114,33 @@ describe('checkForUpdate', () => {
     expect(failed.kind).toBe('available');
     // a fresh install with no network: nothing
     await db.kv.clear();
-    expect((await checkForUpdate({ installedCode: 10000, now: t0, fetchJson: async () => null })).kind).toBe('none');
+    const offline = async () => {
+      throw new Error('offline');
+    };
+    expect((await checkForUpdate({ installedCode: 10000, now: t0, fetchJson: offline })).kind).toBe('none');
+  });
+
+  it('no manifest on the site (404) or a broken one clears the saved release', async () => {
+    const t0 = 6_500_000_000;
+    await checkForUpdate({ installedCode: 10000, now: t0, fetchJson: async () => manifest() });
+    expect((await checkForUpdate({ installedCode: 10000, now: t0 + CHECK_EVERY_MS, fetchJson: async () => null })).kind).toBe('none');
+    // and stays cleared between checks
+    expect((await checkForUpdate({ installedCode: 10000, now: t0 + CHECK_EVERY_MS + 1, fetchJson: async () => manifest() })).kind).toBe('none');
+    await checkForUpdate({ installedCode: 10000, now: t0 + 2 * CHECK_EVERY_MS, fetchJson: async () => manifest() });
+    expect((await checkForUpdate({ installedCode: 10000, now: t0 + 3 * CHECK_EVERY_MS, fetchJson: async () => ({ broken: true }) })).kind).toBe('none');
+  });
+
+  it('a release saved from another manifest address (another build) is not used', async () => {
+    const t0 = 6_800_000_000;
+    let calls = 0;
+    const fetchJson = async () => {
+      calls++;
+      return calls === 1 ? manifest() : null;
+    };
+    await checkForUpdate({ installedCode: 10000, now: t0, url: 'http://127.0.0.1:8697/latest.json', fetchJson });
+    // a new address asks at once, even inside the check period, and its answer (none) wins
+    expect((await checkForUpdate({ installedCode: 10000, now: t0 + 1000, url: 'https://host-caster.com/download/android/latest.json', fetchJson })).kind).toBe('none');
+    expect(calls).toBe(2);
   });
 
   it('Later is saved per version', async () => {

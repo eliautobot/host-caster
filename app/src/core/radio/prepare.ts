@@ -10,6 +10,7 @@ import { DEVICE_VOICE_ID, type Brain, type Break, type BreakLine, type ContextPa
 import { speak } from '../voice/voice';
 import { writeBuiltinBreak } from './builtin';
 import { planBreak, type BreakKind, type BreakPlan } from './planner';
+import type { NotionWrite } from './notionAsk';
 import type { SongRequest } from './requests';
 import { writeBreak, writeMode, type WriteMode, type WrittenBreak } from './writer';
 
@@ -46,6 +47,8 @@ export interface PrepareInput {
   signal?: AbortSignal;
   /** a song request (call-in or AI app) already queued next, or not found */
   request?: SongRequest;
+  /** a Notion ask (call-in or AI app) already sent: the break confirms it */
+  notion?: NotionWrite;
   /** a break on air right now and not in the log yet (talk over the intro): counts as the latest break */
   onAir?: Break;
   /** when the break should be on air (ms epoch, the song's end): the brain and voices get budgets that fit */
@@ -126,7 +129,7 @@ export async function prepareBreak(input: PrepareInput): Promise<PreparedBreak> 
   input.onStage?.('context');
   const packet = await buildContext(station, { songBefore: summarize(input.songBefore), songAfter: summarize(input.songAfter), upcomingSongs: input.upcoming });
   if (input.onAir && !packet.recentBreaks.some((b) => b.id === input.onAir!.id)) packet.recentBreaks = [input.onAir, ...packet.recentBreaks];
-  const plan = planBreak(station, packet, packet.recentBreaks, { kind: input.kind, callIn: input.callIn, hostCount: hosts.length, request: input.request });
+  const plan = planBreak(station, packet, packet.recentBreaks, { kind: input.kind, callIn: input.callIn, hostCount: hosts.length, request: input.request, notion: input.notion });
 
   input.onStage?.('writing');
   // Offline (airplane mode, the computer with the model is off): the scripted fallback and this device's voice stand

@@ -280,6 +280,45 @@ export const MIGRATIONS = [
       CREATE INDEX reports_created ON reports(created_at);
     `,
   },
+  {
+    id: 8,
+    name: 'notion connections and the notes hosts add',
+    sql: `
+      -- One Notion workspace per account (the user's own consent on Notion). tokens_enc is sealed; settings =
+      -- { readIds, read: [{ id, type, title }], write: { id, title, parentId? }, writesOn, recapOn, recapDay? }.
+      CREATE TABLE notion_links (
+        user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        bot_id TEXT NOT NULL,
+        workspace_id TEXT,
+        workspace_name TEXT,
+        workspace_icon TEXT,
+        tokens_enc TEXT NOT NULL,
+        settings TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      -- Every block the hosts added (or tried to), so the listener can see it and undo it. Only these block ids are
+      -- ever deleted. status: done | failed | undone.
+      CREATE TABLE notion_activity (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        at INTEGER NOT NULL,
+        source TEXT NOT NULL,          -- call | app | recap
+        kind TEXT NOT NULL,            -- todo | note
+        text TEXT NOT NULL,
+        page_id TEXT,
+        page_title TEXT,
+        block_id TEXT,
+        status TEXT NOT NULL,
+        error TEXT,
+        undone_at INTEGER,
+        ref TEXT                       -- the ask it answers (an inbox item id ...): the same ask never writes twice
+      );
+      CREATE INDEX notion_activity_user ON notion_activity(user_id, at);
+      CREATE UNIQUE INDEX notion_activity_ref ON notion_activity(user_id, ref) WHERE ref IS NOT NULL;
+    `,
+  },
 ];
 
 /** Applies pending migrations in order, each in its own transaction. Returns the ids applied. */

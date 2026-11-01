@@ -1,0 +1,159 @@
+/* What your hosts can see (Settings). Tokens only, no purple. Prefix aw-hostsee. */
+
+.aw-hostsee__intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.aw-hostsee__intro .aw-acct-desc {
+  max-width: 52ch;
+}
+.aw-hostsee__intro .aw-btn {
+  flex: none;
+}
+
+.aw-hostsee__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.aw-hostsee__error {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.aw-hostsee__error svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--danger);
+}
+
+.aw-hostsee__preview {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.aw-hostsee__label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.aw-hostsee__list {
+  display: grid;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.aw-hostsee__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding: 10px 14px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.aw-hostsee__item + .aw-hostsee__item {
+  box-shadow: inset 0 1px 0 var(--line);
+}
+.aw-hostsee__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.aw-hostsee__detail {
+  flex: none;
+  max-width: 45%;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.aw-hostsee__next {
+  display: grid;
+  gap: var(--space-3);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.aw-hostsee__nexthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.aw-hostsee__nexthead svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+.aw-hostsee__nexthead h3 {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+.aw-hostsee__nextlist {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.3em;
+  color: var(--text);
+  font-size: var(--text-md);
+  line-height: 1.45;
+}
+.aw-hostsee__nextlist li::marker {
+  color: var(--text-3);
+}
+.aw-hostsee__nextnote {
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+
+/* the link at the top of Connections */
+.aw-hostsee-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.aw-hostsee-link__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.aw-hostsee-link__chev {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
+}
+
+@media (max-width: 520px) {
+  .aw-hostsee__intro {
+    flex-direction: column;
+  }
+  .aw-hostsee__item {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .aw-hostsee__detail {
+    max-width: none;
+    text-align: left;
+  }
+}

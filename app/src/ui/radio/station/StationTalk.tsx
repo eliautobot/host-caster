@@ -1,4 +1,5 @@
 // Talk settings + segments of the station editor.
+import { TALK_MIX_STEPS, talkMixOf } from '@/core/radio/planner';
 import type { Station, StationSegments, TalkLength } from '@/core/types';
 import { Slider, Tabs, Toggle } from '../../components';
 import { SEGMENT_META } from '../../screens/parts/segments';
@@ -29,7 +30,16 @@ const SEGMENT_HINT: Record<keyof StationSegments, string> = {
   funFacts: 'Little stories and facts',
 };
 
-type TalkPatch = Partial<Pick<Station, 'talkEvery' | 'talkLength' | 'talkOverIntro' | 'duckLevel' | 'shuffle'>>;
+/** Talk mix steps, Music (0) to My day (4); the default leans toward the listener's day. */
+const MIX: { label: string; hint: string }[] = [
+  { label: 'Music', hint: 'Mostly the songs: what just played and what is next. Your day only when something is due.' },
+  { label: 'Mostly music', hint: 'The songs come first; your day, the news and the weather now and then.' },
+  { label: 'Even', hint: 'Songs and your day about evenly. Every song is introduced.' },
+  { label: 'More my day', hint: 'Your calendar, reminders, mail and news in every break. Every song is introduced; the last one is named now and then.' },
+  { label: 'My day', hint: 'A personal show: your day comes first, the songs get one short line.' },
+];
+
+type TalkPatch = Partial<Pick<Station, 'talkEvery' | 'talkLength' | 'talkMix' | 'talkOverIntro' | 'duckLevel' | 'shuffle'>>;
 
 export function StationTalk({ station, live, onChange }: { station: Station; live: boolean; onChange: (p: TalkPatch) => void }) {
   return (
@@ -49,6 +59,24 @@ export function StationTalk({ station, live, onChange }: { station: Station; liv
         <span className="aw-field__label">How long they talk</span>
         <Tabs variant="segmented" label="How long they talk" items={LENGTHS} value={station.talkLength} onChange={(talkLength) => onChange({ talkLength })} />
         <p className="aw-field__hint">{LENGTH_HINT[station.talkLength]}</p>
+      </div>
+      <div className="aw-field aw-talkmix">
+        <Slider
+          label="Talk mix"
+          showLabel
+          thumb
+          min={0}
+          max={TALK_MIX_STEPS - 1}
+          step={1}
+          value={talkMixOf(station)}
+          format={(x) => MIX[x]?.label}
+          onChange={(talkMix) => onChange({ talkMix })}
+        />
+        <div className="aw-talkmix__ends" aria-hidden>
+          <span>Music</span>
+          <span>My day</span>
+        </div>
+        <p className="aw-field__hint">{MIX[talkMixOf(station)]?.hint}</p>
       </div>
       <Slider
         label="Music under the voices"

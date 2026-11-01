@@ -190,6 +190,12 @@
   .aw-savebar__actions .aw-btn--primary {
     flex: 1;
   }
+
+  /* a host is talking: the on-air strip sits above the mini player, so Save moves up above it */
+  .aw-app[data-layout='phone']:has(.aw-mini-dock .aw-onair--mini) .aw-savebar {
+    bottom: calc(var(--space-3) + 60px);
+    transition: bottom var(--dur-fast) ease;
+  }
 }
 
 /* status */

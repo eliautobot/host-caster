@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NOW, packet, pastBreak, seeded, station } from './fixtures';
+import { NOW, packet, pastBreak, seeded, settled, station } from './fixtures';
 import { candidates, factFor, planBreak, planTopicKeys, shouldBreakAfter, TALK_LENGTH_LINES } from './planner';
 
 describe('planner', () => {
@@ -12,37 +12,44 @@ describe('planner', () => {
   it('respects talkLength line ranges and gives two hosts at least two lines', () => {
     for (const len of ['short', 'normal', 'long'] as const) {
       for (let seed = 1; seed < 30; seed++) {
-        const plan = planBreak(station({ talkLength: len }), packet(), [], { now: NOW, rand: seeded(seed), hostCount: 1 });
+        const plan = planBreak(station({ talkLength: len }), packet(), settled(), { now: NOW, rand: seeded(seed), hostCount: 1 });
         const [lo, hi] = TALK_LENGTH_LINES[len];
         expect(plan.lines).toBeGreaterThanOrEqual(lo);
         expect(plan.lines).toBeLessThanOrEqual(hi);
       }
     }
-    expect(planBreak(station({ talkLength: 'short' }), packet(), [], { now: NOW, rand: () => 0, hostCount: 2 }).lines).toBe(2);
+    expect(planBreak(station({ talkLength: 'short' }), packet(), settled(), { now: NOW, rand: () => 0, hostCount: 2 }).lines).toBe(2);
   });
 
   it('puts urgent items first: a reminder due in 20 min, a calendar event in 40 min, a birthday tomorrow', () => {
-    const plan = planBreak(station({ talkLength: 'long' }), packet(), [], { now: NOW, rand: () => 0 });
+    const plan = planBreak(station({ talkLength: 'long' }), packet(), settled(), { now: NOW, rand: () => 0 });
     expect(plan.topics[0]).toBe('reminders');
     expect(plan.topics).toContain('calendar');
     expect(plan.items.map((i) => i.key)).toContain('calendar:dentist');
-    expect(plan.outro && plan.intro).toBe(true);
+    expect(plan.intro).toBe(true);
   });
 
-  it('does not repeat a calendar item within 45 minutes, or weather within its cooldown', () => {
+  it('does not repeat a calendar item for 90 minutes (once more when it is about to start), or weather within its cooldown', () => {
     const recent = [pastBreak(['calendar', 'calendar:dentist', 'weather'], 30)];
     const keys = candidates(station(), packet(), recent, NOW).map((c) => c.key);
     expect(keys).not.toContain('calendar:dentist');
     expect(keys).not.toContain('weather');
     const later = candidates(station(), packet(), [pastBreak(['calendar', 'calendar:dentist', 'weather'], 50)], NOW).map((c) => c.key);
-    expect(later).toContain('calendar:dentist');
+    expect(later).not.toContain('calendar:dentist');
     expect(later).toContain('weather');
+    // 25 minutes before it starts, last said an hour ago: once more
+    const close = NOW + 15 * 60_000;
+    const soon = candidates(station(), packet(), [pastBreak(['calendar', 'calendar:dentist'], 50)], close).map((c) => c.key);
+    expect(soon).toContain('calendar:dentist');
+    // ... but not again ten minutes later
+    const twice = [{ ...pastBreak(['calendar', 'calendar:dentist'], 0), at: close }, pastBreak(['calendar', 'calendar:dentist'], 50)];
+    expect(candidates(station(), packet(), twice, close + 20 * 60_000).map((c) => c.key)).not.toContain('calendar:dentist');
   });
 
   it('rotates topics across breaks', () => {
     const s = station({ talkLength: 'normal' });
     const seen = new Set<string>();
-    const recent = [];
+    const recent = settled();
     let now = NOW;
     for (let i = 0; i < 6; i++) {
       const plan = planBreak(s, packet({ reminders: [] }), recent, { now, rand: seeded(i + 3) });
@@ -67,7 +74,7 @@ describe('planner', () => {
     expect(call.items).toHaveLength(0);
     expect(call.intro).toBe(false);
     const inbox = packet({ inbox: [{ id: 'i1', kind: 'segment', text: 'Shout-out to the night shift', createdAt: NOW }], reminders: [] });
-    expect(planBreak(station(), inbox, [], { now: NOW, rand: () => 0 }).topics[0]).toBe('inbox');
+    expect(planBreak(station(), inbox, settled(), { now: NOW, rand: () => 0 }).topics[0]).toBe('inbox');
   });
 
   it('picks a fun fact that has not aired recently', () => {

@@ -68,6 +68,8 @@ export const LIFE_SOON = ['Mark it down, {event} is {when}.', 'Coming up {when}:
 export const LIFE_YEARS = ['{years} years. That’s something.', 'That makes it {years} years.'];
 
 export const NOTE = ['And a note you left for us: {note}.', 'You asked us to mention this: {note}.', 'A little note from you: {note}.'];
+/** a Notion page the listener picked: {what} is a short pick from it ("open to-dos: oat milk and eggs, plus 2 more") */
+export const NOTION_NOTE = ['From your Notion page {page}, {what}.', 'Quick look at your Notion page {page}: {what}.', 'Over in your Notion page {page}, {what}.'];
 export const REMINDER = ['Quick reminder for you: {text}, {when}.', 'Gentle reminder: {text}, {when}.', 'Before I forget: {text}, {when}.'];
 export const FACT_LEAD = ['Fun fact for you.', 'Here’s a fun one.', 'Did you know this?', 'Little bit of music trivia.'];
 

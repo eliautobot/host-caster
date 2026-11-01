@@ -9,6 +9,25 @@ export interface Cached<T> {
   error?: string;
 }
 
+export interface CacheStatus {
+  fetchedAt?: number;
+  /** the last fetch failed (this session) */
+  error?: string;
+  /** when that fetch was tried */
+  triedAt?: number;
+}
+
+/** The last outcome per cache key in this session ("What your hosts can see" shows it). */
+const statuses = new Map<string, CacheStatus>();
+
+/** Last fetch time (kv) and the last error (this session) of a source's cache key. */
+export async function cacheStatus(key: string): Promise<CacheStatus> {
+  const s = statuses.get(key);
+  if (s) return s;
+  const prev = await kvGet(key).catch(() => undefined);
+  return { fetchedAt: prev?.fetchedAt };
+}
+
 /**
  * Returns the cached value when it is fresher than `ttlMs`; otherwise fetches, stores and returns it. A failed fetch
  * returns the old snapshot (marked stale) so the hosts still have something true to say.
@@ -19,9 +38,12 @@ export async function cached<T>(key: string, ttlMs: number, fetcher: () => Promi
   try {
     const value = await fetcher();
     await kvSet(key, value, now).catch(() => undefined);
+    statuses.set(key, { fetchedAt: now, triedAt: now });
     return { value, fetchedAt: now, stale: false };
   } catch (err) {
-    return { value: prev?.value, fetchedAt: prev?.fetchedAt, stale: true, error: err instanceof Error ? err.message : String(err) };
+    const error = err instanceof Error ? err.message : String(err);
+    statuses.set(key, { fetchedAt: prev?.fetchedAt, error, triedAt: now });
+    return { value: prev?.value, fetchedAt: prev?.fetchedAt, stale: true, error };
   }
 }
 

@@ -86,9 +86,10 @@ on-air log), then deletes the old one; `index.html` moves the theme key the same
   hostIds: string[],          // 1..4, first = lead
   talkEvery: number,          // songs between breaks, 1..10
   talkLength: 'short'|'normal'|'long',   // ~1-2 / 3-4 / 5-8 lines total
+  talkMix?: number,           // 0 = Music .. 4 = My day; missing = 3 (core/radio/planner.ts DEFAULT_TALK_MIX)
   segments: { songs, time, weather, calendar, email, news, lifeEvents, notes, reminders, funFacts: boolean },
   talkOverIntro: boolean, duckLevel: number /* 0..1 music volume under voice, default 0.18 */,
-  newsFeeds: string[], shuffle: boolean }
+  newsFeeds: string[] /* empty = the account's news */, shuffle: boolean }
 ```
 
 ## Core modules and their public APIs
@@ -147,6 +148,12 @@ Song requests (a call-in "play X", or `request_song` from an AI app via the inbo
 the library (`core/radio/requests.ts`), played next with `player.playNext`, and named once per break (a call-in: in the
 answer; a request that is the next song: only in the intro line); a request that is not in the library is answered
 honestly. Aired breaks live in `breaks` (On-air history screen `#/on-air`).
+Notion asks (`core/radio/notionAsk.ts` pure, `notionWrite.ts` effects): a call-in, or an AI-app note/segment in the
+inbox, that asks to add something ("add oat milk to my list") is read by the station's brain into one checked action
+(`add_todo` / `add_note` / `none`, made of the listener's own words) or by the offline reader, sent to
+`/api/notion/write` (inbox items with `ref` = `inbox:<id>`), and the result rides on `plan.notion`: a FACTS line and a
+plan sentence so the hosts confirm it once ("Done, it's in your Notion") or say kindly why not; the scripted fallback
+has its own lines. After 9 PM a break may add the daily recap (off by default).
 
 `core/ai/` brains. `generate(brain, { system, messages, json?: boolean, maxTokens }) => Promise<string>`.
 Kinds: `openai` (any OpenAI-compatible chat completions: OpenAI, xAI Grok, OpenRouter, Groq, Mistral, DeepSeek,
@@ -173,9 +180,23 @@ ContextPacket = { now: { iso, local, partOfDay, weekday }, listener: { name, cal
   news?: Headline[], lifeEvents?: LifeEvent[], notes?: string[], reminders?: Reminder[], inbox?: InboxItem[],
   recentBreaks: Break[] }
 ```
-Each source caches its last snapshot in `kv` with `fetchedAt` so the radio keeps working offline. Weather: Open-Meteo
-(no key). Calendar: Google (server) and ICS feeds. Email: Gmail (server) and IMAP (server). News: RSS feeds.
-Topic rotation and cooldowns live in `core/radio/planner.ts` (do not repeat a calendar item within 45 min, etc.).
+Each source caches its last snapshot in `kv` with `fetchedAt` so the radio keeps working offline (`cacheStatus(key)`
+gives the last fetch and this session's last error). Weather: Open-Meteo (no key). Calendar: Google (server) and ICS
+feeds. Email: Gmail (server) and IMAP (server); email is on for new stations and connecting a mailbox switches it on for
+every station (`core/radio/emailOn.ts`). News: RSS feeds, a station's own `newsFeeds` or else the account's
+(`settings.connections.news`: `feeds` = the listener's own list, empty = the public feeds of `region`, guessed from the
+place in About me, the time zone, then the language; `core/context/news.ts`, every default URL checked live by
+`context/feeds.check.test.ts`).
+Topic rotation and cooldowns live in `core/radio/planner.ts`, day first: the next song is always introduced, the last
+one only every N breaks by the station's talk mix (every break at Music, 1 in 3 at the default); every regular break
+carries one item from the listener's day when there is one (reminders and events starting soon, today's events,
+important mail, the listener's own notes and chosen note-app pages, news, then weather and time, then fun facts); the first break of a session and the first after the top
+of each hour is a short rundown (next events today, due reminders, weather, a headline or two; `rundown` in the break's
+topics). An event rests 90 min and a reminder 75 min (said once more when 30 min away), a mail 6 h, a headline 12 h;
+the planner sees the station's last 60 breaks (`RECENT_BREAKS`). Settings > What your hosts can see
+(`core/radio/hostsView.ts`) shows every source as the hosts get it, and what the next break would bring up.
+Notion (`context/notion.ts`, when `settings.connections.notion.connected`): the chosen pages join `notes` as "Your
+Notion page ... says: ..." lines (kv `notion:context`, 10 min).
 
 `core/api/` (owner: server agent) typed client for the server: `api.baseUrl`, `api.session`, `auth.signIn('google'|
 'x'|'local')`, `auth.signOut()`, `sync.pull()/push()`, `aiProxy`, `ttsProxy`, `integrations.calendar()`, `.email()`,
@@ -192,13 +213,16 @@ apps' now playing via notification access; events `trackchange`, `playstate`), `
 Config from env (and `.env`): `PORT` (8660), `PUBLIC_URL`, `DATA_DIR` (./data), `SECRET_KEY` (32 bytes base64,
 generated into DATA_DIR on first start if missing), `GOOGLE_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`,
 `ALLOW_LOCAL_ACCOUNTS` (true when no OAuth is configured), `MUSIC_DIR` (optional server library),
-`ALLOW_PRIVATE_FETCH` (false), `APP_SCHEME` (`hostcaster`).
+`ALLOW_PRIVATE_FETCH` (false), `APP_SCHEME` (`hostcaster`), `NOTION_CLIENT_ID/SECRET` (the owner's public Notion
+connection; empty = the Notion card says it is not set up), `NOTION_VERSION` (`2026-03-11`).
 
 Tables: `users`, `identities` (provider, subject, encrypted tokens), `sessions` (sha256 token, kind web|app,
 expires), `sync_docs` (user_id, json, rev), `sync_items` (user_id, kind, id, json or NULL = deleted, updated_at, seq)
 and `sync_item_meta` (user_id, seq, pruned_seq), `secrets` (encrypted provider keys), `inbox` (notes/segments from AI apps),
 `connector_tokens`, `server_tracks`, `chatgpt_accounts` (per user: issued ChatGPT client id, verified subject, sealed
-tokens; the install's agent host id lives in `DATA_DIR/chatgpt-host.json`).
+tokens; the install's agent host id lives in `DATA_DIR/chatgpt-host.json`), `notion_links` (per user: workspace, sealed
+tokens, settings `{ read, write, writesOn, recapOn }`) and `notion_activity` (every block the hosts added or tried
+to, with its block id for Undo and an optional `ref` so one ask never writes twice; migration 8).
 Secrets at rest: AES-256-GCM with SECRET_KEY; API keys never returned to clients in clear unless the owner asks.
 
 Routes (JSON, errors `{ error: { code, message } }`):
@@ -228,6 +252,16 @@ Routes (JSON, errors `{ error: { code, message } }`):
   videos in steps, about 2 quota units per 50), `GET /api/google/youtube/search?q=`,
   `POST /api/imap/test`, `GET /api/imap/summary`, `POST /api/fetch-text {url}` (ICS/RSS; blocks private ranges unless
   ALLOW_PRIVATE_FETCH).
+- Notion (`server/src/integrations/notion/`): `POST /api/notion/start {app?, cc?, return?}` -> `{ url }` (one-time,
+  opens `/auth/notion/start`, which binds the browser and goes to Notion's consent), `GET /auth/notion/callback` (web:
+  stores the link, back to `/#/settings/connections?notion=connected`; phone: `hostcaster://notion?code=`, finished with
+  `POST /api/notion/finish {code, verifier}`), `GET /api/notion/status`, `DELETE /api/notion` (revokes),
+  `GET /api/notion/pages?q=` (what the user shared), `PUT /api/notion/settings {read?, write? {id, mode new|direct},
+  writesOn?, recapOn?}` (mode new = a "Host-Caster" page made inside the chosen one), `GET /api/notion/context`
+  (`{ notes: [{ id, title, text, edited? }], problems }`, open to-dos/headings/rows, capped, cached 10 min in memory),
+  `POST /api/notion/write {kind: todo|note, text, source: call|app, ref?, tz?}` (appends one block; never edits or
+  deletes the user's blocks; 30 an hour), `POST /api/notion/recap {day, text}` (once a day, only when turned on),
+  `GET /api/notion/activity`, `POST /api/notion/activity/:id/undo` (trashes only that block).
 - Server library: `GET /api/library/tracks`, `GET /api/library/stream/:id` (Range), `GET /api/library/art/:id`,
   `POST /api/library/rescan`.
 - AI apps connector (MCP, Streamable HTTP): `POST /mcp/:token`. Tools: `now_playing`, `list_hosts`,

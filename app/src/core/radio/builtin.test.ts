@@ -1,17 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { builtinTurn, fill, joinLines, writeBuiltinBreak } from './builtin';
-import { hosts, NOW, packet, pastBreak, seeded, station } from './fixtures';
+import { notionNoteText } from '../context/notion';
+import { builtinTurn, fill, joinLines, notionNoteSpoken, writeBuiltinBreak } from './builtin';
+import { hosts, NOW, packet, pastBreak, seeded, settled, station } from './fixtures';
 import { planBreak } from './planner';
 
 const lineup = hosts(2);
 
-function breakFor(seed: number, len: 'short' | 'normal' | 'long' = 'normal', p = packet(), kind?: 'opening' | 'callin', callIn?: string) {
-  const s = station({ talkLength: len });
+function breakFor(seed: number, len: 'short' | 'normal' | 'long' = 'normal', p = packet(), kind?: 'opening' | 'callin', callIn?: string, talkMix?: number) {
+  const s = station({ talkLength: len, talkMix });
   const plan = planBreak(s, p, p.recentBreaks, { now: NOW, rand: seeded(seed), kind, callIn, hostCount: lineup.length });
   return { plan, lines: writeBuiltinBreak(s, lineup, plan, p, { rand: seeded(seed + 100), now: NOW }) };
 }
 
 describe('scripted fallback (template lines)', () => {
+  it('says a Notion page in a few words, not its whole summary', () => {
+    const db = notionNoteText({
+      id: 'd',
+      title: 'Todo List',
+      edited: 'today',
+      text: 'Recent entries: Click me to see even more detail (Status: Not started, Due date: 2026-10-31); Click the blue New button to add a task (Status: Not started, Due date: 2026-10-31); Click the due date to change it (Status: Not started, Due date: 2026-11-01).',
+    });
+    expect(notionNoteSpoken(db)).toEqual({ page: 'Todo List', what: 'recent entries: Click me to see even more detail and Click the blue New button to add a task, plus 1 more' });
+    const list = notionNoteText({ id: 'g', title: 'Groceries', text: 'Open to-dos: oat milk; eggs. Weekend: farmers market.' });
+    expect(notionNoteSpoken(list)).toEqual({ page: 'Groceries', what: 'open to-dos: oat milk and eggs' });
+    expect(notionNoteSpoken('Water the plants')).toBeUndefined();
+
+    // on air: the page and two items, no statuses or dates
+    let said = '';
+    for (let seed = 1; seed <= 40 && !said; seed++) {
+      said = breakFor(seed, 'long', packet({ notes: [db], recentBreaks: settled() }), undefined, undefined, 1)
+        .lines.map((l) => l.text)
+        .find((t) => t.includes('Notion page')) ?? '';
+    }
+    expect(said).toMatch(/Notion page Todo List/);
+    expect(said).not.toMatch(/Status|2026-|edited/);
+    expect(said.length).toBeLessThan(200);
+  });
+
+
   it('fills templates and capitalizes on demand', () => {
     expect(fill('{Cond} in {place}', { cond: 'light rain', place: 'Porto' })).toBe('Light rain in Porto');
   });
@@ -28,7 +54,8 @@ describe('scripted fallback (template lines)', () => {
   });
 
   it('names the songs and only uses facts from the packet', () => {
-    const { lines } = breakFor(7, 'long');
+    // a music-first station names the song that just played as well as the next one
+    const { lines } = breakFor(7, 'long', packet({ recentBreaks: settled() }), undefined, undefined, 0);
     const text = lines.map((l) => l.text).join(' ');
     expect(text).toMatch(/Midnight City/);
     expect(text).toMatch(/Dreams/);

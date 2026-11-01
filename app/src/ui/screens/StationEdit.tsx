@@ -177,7 +177,7 @@ export default function StationEdit({ params }: ScreenProps) {
         <StationSegmentsEditor segments={draft.segments} onChange={(segments) => set({ segments })} />
       </FormSection>
 
-      <FormSection title="News feeds" description="RSS or Atom feeds the hosts take headlines from.">
+      <FormSection title="News feeds" description="Headlines the hosts bring up. Empty = your news from Settings.">
         <StationFeeds feeds={draft.newsFeeds} newsOn={draft.segments.news} onChange={(newsFeeds) => set({ newsFeeds })} />
       </FormSection>
 

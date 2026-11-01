@@ -2,6 +2,7 @@
 // web OAuth return (?signedIn= / ?linked= / ?error=) and sends first-run users to onboarding.
 import { create } from 'zustand';
 import { api, auth, isOnline, listenForDeepLinks, online, signInErrorText, sync, type SyncState } from '@/core/api';
+import { listenForNotionLinks, notion } from '@/core/api/notion';
 import { getSettings } from '@/core/db';
 import { onDeepLink, sellsPlans } from '@/core/native';
 import type { ApiSession, ServerConfig } from '@/core/types';
@@ -102,8 +103,20 @@ async function routeOnline(session: ApiSession | undefined): Promise<void> {
   if (!stale()) await maybeOnboard(true);
 }
 
+/** Resolves once the saved session was checked at boot. */
+const sessionReady = (): Promise<void> =>
+  new Promise((resolve) => {
+    if (useSession.getState().ready) return resolve();
+    const off = useSession.subscribe((s) => {
+      if (!s.ready) return;
+      off();
+      resolve();
+    });
+  });
+
 export function startSessionStore(): () => void {
   listenForDeepLinks();
+  listenForNotionLinks(sessionReady);
   startPlanStore();
   const offs = [
     auth.on('change', (session) => {
@@ -120,6 +133,12 @@ export function startSessionStore(): () => void {
     onDeepLink((url) => {
       const m = /^[a-z][a-z0-9+.-]*:\/\/billing\?status=([a-z]+)/i.exec(url);
       if (m) navigate(m[1] === 'done' ? '/settings/plan?checkout=done' : '/settings/plan?portal=1');
+    }),
+    // phones: Notion's consent came back while Connections was not open (Android stopped the app meanwhile and the
+    // link started it again): show the result there, where the card opens the page picker
+    notion.on('change', (e) => {
+      if (!e.link || useRoute.getState().path === '/settings/connections') return;
+      navigate(`/settings/connections?notion=${e.connected ? 'connected' : encodeURIComponent(e.code ?? 'error')}`);
     }),
     sync.on('state', (s) => useSession.setState({ sync: s })),
     api.on('probe', (config) => useSession.setState({ config, available: api.available })),

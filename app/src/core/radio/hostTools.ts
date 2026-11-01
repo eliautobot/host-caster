@@ -138,7 +138,9 @@ function soloStation(host: Host): Station {
 export async function sayTestLine(host: Host, opts: { onLines?: (lines: BreakLine[]) => void; signal?: AbortSignal } = {}): Promise<BreakLine[]> {
   const station = soloStation(host);
   const packet = await buildContext(station, {}, { budgetMs: 5000 });
-  const plan = { ...planBreak(station, packet, [], { kind: 'opening', hostCount: 1 }), lines: 1 };
+  // one line: the opening's first topic, not a whole rundown of the day
+  const opening = planBreak(station, packet, [], { kind: 'opening', hostCount: 1 });
+  const plan = { ...opening, rundown: undefined, items: opening.items.slice(0, 1), topics: opening.topics.slice(0, 1), lines: 1 };
   const brain = await resolveBrain(host.brainId);
   const brains = new Map([[brain.id, brain]]);
   const { lines } = await writeBreak({ station, hosts: [host], brains, plan, packet, signal: opts.signal, timeoutMs: 60_000 });

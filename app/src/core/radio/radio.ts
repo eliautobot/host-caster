@@ -13,6 +13,8 @@ import { skippedNotice, standInNotice } from './notice';
 import { loadLineup, prepareBreak, warmUpBrains, type PreparedBreak } from './prepare';
 import { extendQueue, stationQueue } from './queue';
 import { isMood, isSongRequest, nextInboxRequest, queueRequest, requestQuery, type SongRequest } from './requests';
+import type { NotionWrite } from './notionAsk';
+import { maybeNotionRecap, nextInboxNotionWrite, takeNotionWrite } from './notionWrite';
 
 /** start writing this long before the song ends (slow local models need the head start) ... */
 const PREP_LEAD_MS = 80_000;
@@ -191,7 +193,9 @@ class Radio {
     // the song under the call-in, so the hosts can name what is playing
     const under = this.anyAppMode ? this.anyAppPrev : this.current;
     const request = await this.takeRequest(said);
-    const ready = await this.prepare(station, 'callin', said, new AbortController(), under, undefined, undefined, request);
+    // "add oat milk to my list": added to Notion now, so the answer can confirm it
+    const notion = await takeNotionWrite(said, station).catch(() => undefined);
+    const ready = await this.prepare(station, 'callin', said, new AbortController(), under, undefined, undefined, request, undefined, notion);
     if (!ready || session !== this.session) {
       if (session === this.session) this.set({ phase: 'music' });
       if (!ready) throw new Error('Your hosts could not pick up right now. Check the Brains page.');
@@ -273,10 +277,12 @@ class Radio {
     entry.promise = (async () => {
       // a song an AI app asked for (request_song over MCP) is queued next and announced in this break
       const request = await this.inboxRequest().catch(() => undefined);
+      // an AI app asked to add something to Notion: added now, confirmed in this break
+      const notion = await nextInboxNotionWrite(station).catch(() => undefined);
       // songs that cannot play here (checked ahead by the player) leave the queue before the host names one
       await player.aheadReady(4000);
       const q = player.state;
-      return this.prepare(station, kind, undefined, controller, track, this.nextTrack(), q.queue.slice(q.index + 1, q.index + 4), request, deadline);
+      return this.prepare(station, kind, undefined, controller, track, this.nextTrack(), q.queue.slice(q.index + 1, q.index + 4), request, deadline, notion);
     })().then((b) => {
       entry.done = true;
       entry.ready = b;
@@ -391,13 +397,14 @@ class Radio {
     upcoming?: Track[],
     request?: SongRequest,
     deadline?: number,
+    notion?: NotionWrite,
   ): Promise<PreparedBreak | undefined> {
     const session = this.session;
     const showPrep = kind === 'callin';
     if (showPrep) this.set({ phase: 'preparing' });
     const timer = setTimeout(() => controller.abort(new Error('The break took too long to write')), PREP_TIMEOUT_MS);
     try {
-      const b = await prepareBreak({ station, kind, callIn, songBefore, songAfter, upcoming, request, deadline, signal: controller.signal, onAir: this.onAirBreak });
+      const b = await prepareBreak({ station, kind, callIn, songBefore, songAfter, upcoming, request, notion, deadline, signal: controller.signal, onAir: this.onAirBreak });
       if (session === this.session && kind !== 'callin') this.notePrep(b.tookMs);
       return session === this.session && !controller.signal.aborted ? b : undefined;
     } catch (err) {
@@ -435,6 +442,7 @@ class Radio {
         });
         if (session !== this.session || signal?.aborted) return;
         await this.record(b);
+        void maybeNotionRecap(b.station).catch(() => undefined);
       } catch (err) {
         console.warn('[hostcaster] break failed on air', err);
       } finally {

@@ -2,7 +2,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { randomToken, sha256 } from '../crypto.js';
 
-export const FLOW_TTL = { oauth: 10 * 60 * 1000, exchange: 2 * 60 * 1000, link: 5 * 60 * 1000, linkfinish: 2 * 60 * 1000, chatgpt: 10 * 60 * 1000 };
+export const FLOW_TTL = { oauth: 10 * 60 * 1000, exchange: 2 * 60 * 1000, link: 5 * 60 * 1000, linkfinish: 2 * 60 * 1000, chatgpt: 10 * 60 * 1000, notionstart: 5 * 60 * 1000, notionfinish: 2 * 60 * 1000 };
 
 /** Stores a flow and returns the raw token (state / code / ticket). */
 export function putFlow(db, kind, { provider = null, userId = null, data = {} } = {}) {

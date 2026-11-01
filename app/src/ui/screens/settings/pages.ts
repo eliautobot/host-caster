@@ -2,7 +2,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import { AudioLines, BrainCircuit, Database, Palette, Plug, UserRound, Contact, type LucideIcon } from 'lucide-react';
 import { Headphones, ListMusic } from 'lucide-react';
-import { Smartphone } from 'lucide-react';
+import { Eye, Smartphone } from 'lucide-react';
 import { isNative, sellsPlans } from '@/core/native';
 import { CreditCard, ShieldCheck } from 'lucide-react';
 import { api, isOnline } from '@/core/api';
@@ -41,6 +41,8 @@ export const settingsPages: SettingsPageDef[] = [
     icon: ListMusic, group: 'Radio', screen: lazy(() => import('./MusicServices')) },
   { id: 'connections', title: 'Connections', description: 'Calendar, email, weather, news and AI apps', icon: Plug,
     group: 'Radio', screen: lazy(() => import('./Connections')) },
+  { id: 'hosts-see', title: 'What your hosts can see', description: 'Your day as the hosts get it, source by source',
+    icon: Eye, group: 'Radio', screen: lazy(() => import('./HostsSee')) },
   { id: 'playback', title: 'Playback', description: 'Crossfade and keyboard shortcuts', icon: Headphones, group: 'App',
     screen: lazy(() => import('./Playback')) },
   { id: 'appearance', title: 'Appearance', description: 'Theme and display', icon: Palette, group: 'App',

@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { CalendarRange, Link2, Newspaper, Plus, Trash2 } from 'lucide-react';
-import { fetchText } from '@/core/context';
+import { CalendarRange, Link2, Newspaper, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { NEWS_REGIONS, feedName, feedsReachable, fetchText, newsRegion } from '@/core/context';
+import { useAccountNews } from '@/state/news';
+import { useSession } from '@/state/session';
 import { useSettings } from '@/state/settings';
-import { Button, IconButton, TextField, Toggle, toast } from '../../../components';
+import { Button, IconButton, Select, TextField, Toggle, toast } from '../../../components';
 import { Hint, SectionCard, errorText } from '../account/parts';
 
 const NEWS_SUGGESTIONS = [
-  { name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
+  { name: 'BBC World', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
   { name: 'NPR News', url: 'https://feeds.npr.org/1001/rss.xml' },
   { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
 ];
@@ -76,7 +78,7 @@ function FeedList({
                 <Link2 aria-hidden />
               </span>
               <span className="aw-acct-row__text">
-                <span className="aw-acct-row__title">{new URL(u).hostname.replace(/^www\./, '')}</span>
+                <span className="aw-acct-row__title">{feedName(u)}</span>
                 <span className="aw-acct-row__sub aw-acct-url">{u}</span>
               </span>
               <IconButton icon={Trash2} label="Remove" size="sm" onClick={() => void onChange(urls.filter((x) => x !== u))} />
@@ -141,25 +143,49 @@ export function CalendarFeedsSection() {
 export function NewsFeedsSection() {
   const connections = useSettings((s) => s.settings.connections);
   const update = useSettings((s) => s.update);
+  const account = useAccountNews();
   const news = connections.news ?? { enabled: true };
-  const feeds = news.feeds ?? [];
-  const enabled = news.enabled !== false;
+  const save = (patch: Partial<NonNullable<typeof connections.news>>) =>
+    update({ connections: { ...connections, news: { ...news, enabled: account.enabled, ...patch } } });
+  const region = newsRegion(account.region)?.label ?? 'World';
+  // re-render on sign-in: a browser on its own cannot read the feeds, the server can
+  useSession((x) => x.session);
+  const blocked = account.enabled && !account.custom && !feedsReachable();
   return (
-    <SectionCard icon={Newspaper} title="News feeds (RSS)" status={feeds.length ? `${feeds.length} feed${feeds.length === 1 ? '' : 's'}` : 'Headlines for the hosts to bring up'}>
+    <SectionCard
+      id="news"
+      icon={Newspaper}
+      title="News"
+      status={account.enabled ? `${account.feeds.length} feed${account.feeds.length === 1 ? '' : 's'}, ${account.custom ? 'your own list' : `top stories for ${region}`}` : 'Off: the hosts leave the news out'}
+      badge={account.enabled ? { label: 'On', tone: 'ok', dot: true } : { label: 'Off', tone: 'neutral' }}
+    >
       <Toggle
         label="News on air"
-        description="Hosts mention a headline now and then on stations with news on."
-        checked={enabled}
-        onChange={(on) => void update({ connections: { ...connections, news: { ...news, enabled: on } } })}
+        description="A headline now and then, and one or two in the rundown at the top of the hour."
+        checked={account.enabled}
+        onChange={(on) => void save({ enabled: on })}
       />
-      <FeedList
-        kind="rss"
-        urls={feeds}
-        placeholder="https://example.com/feed.xml"
-        suggestions={NEWS_SUGGESTIONS}
-        onChange={(next) => update({ connections: { ...connections, news: { ...news, enabled, feeds: next } } })}
-      />
-      <Hint>These feeds play on every station. Each station can add its own in its settings.</Hint>
+      {account.enabled && (
+        <>
+          <Select
+            label="Headlines from"
+            value={account.region}
+            options={NEWS_REGIONS.map((r) => ({ value: r.id, label: r.label }))}
+            hint={account.custom ? 'Picking a region swaps your list for its top stories.' : news.region ? undefined : 'Picked from your location and language.'}
+            onChange={(id) => void save({ region: id, feeds: [] })}
+          />
+          <FeedList kind="rss" urls={account.feeds} placeholder="https://example.com/feed.xml" suggestions={NEWS_SUGGESTIONS} onChange={(next) => save({ feeds: next })} />
+          {account.custom && (
+            <div className="aw-acct-chips">
+              <Button size="sm" variant="ghost" icon={RotateCcw} onClick={() => void save({ feeds: [] })}>
+                Use the top stories for {region}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+      {blocked && <Hint>A web browser cannot read news feeds by itself. Sign in and your Host-Caster server fetches the headlines for you; the phone apps read them directly.</Hint>}
+      <Hint>Every station plays these unless you give it news feeds of its own. All of them are free, public feeds.</Hint>
     </SectionCard>
   );
 }

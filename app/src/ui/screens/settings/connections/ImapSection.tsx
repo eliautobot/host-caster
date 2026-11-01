@@ -7,6 +7,7 @@ import { useSettings } from '@/state/settings';
 import { runAction } from '../../../actions';
 import { Button, Select, TextField, Toggle, toast } from '../../../components';
 import { Actions, ConfirmSheet, Hint, SectionCard, errorText, useLoad } from '../account/parts';
+import { emailOnForStations } from './emailOn';
 
 const PRESETS: { value: string; label: string; host: string; port: number; note?: string }[] = [
   { value: 'custom', label: 'Other (enter the server)', host: '', port: 993 },
@@ -72,6 +73,7 @@ export function ImapSection() {
       const r = await integrations.imap.save(body());
       await update({ connections: { ...connections, email: { gmail: connections.email?.gmail ?? false, imap: true } } });
       toast.success('Mailbox connected', `${r.unread} unread`);
+      await emailOnForStations();
     });
     setBusy(undefined);
     if (ok) {
@@ -95,7 +97,9 @@ export function ImapSection() {
             label="Hosts mention new mail"
             description="Unread mail in the inbox: who wrote and the subject. Flagged mail first."
             checked={enabled}
-            onChange={(on) => void update({ connections: { ...connections, email: { gmail: connections.email?.gmail ?? false, imap: on } } })}
+            onChange={(on) =>
+              void update({ connections: { ...connections, email: { gmail: connections.email?.gmail ?? false, imap: on } } }).then(() => (on ? emailOnForStations() : undefined))
+            }
           />
           <Actions>
             <Button onClick={() => void test()} loading={busy === 'test'}>

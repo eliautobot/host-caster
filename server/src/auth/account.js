@@ -1,5 +1,6 @@
 // Local accounts, native code exchange, /api/me, link/unlink and account deletion.
 import { HttpError } from '../errors.js';
+import { forgetNotion } from '../integrations/notion/routes.js';
 import { verifierMatches } from './binding.js';
 import { putFlow, takeFlow } from './flows.js';
 import { openTokens } from './oauth.js';
@@ -184,6 +185,7 @@ export async function accountRoutes(app) {
       await PROVIDERS[identity.provider]?.revoke(app.config, openTokens(app, identity));
     }
     await app.chatgpt.forgetUser(user.id);
+    await forgetNotion(app, user.id);
     deleteUser(app.db, user.id);
     clearSessionCookie(app, reply);
     return reply.status(204).send();

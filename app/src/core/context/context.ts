@@ -5,8 +5,16 @@ import type { ContextPacket, Station, Track, TrackSummary } from '../types';
 import { partOfDay } from '../util/time';
 import { within } from './cache';
 import { activeNotes, dueLifeEvents, dueReminders } from './life';
-import { getCalendar, getEmail, getInbox, getNews } from './sources';
+import { accountNews, deviceHints, stationFeeds } from './news';
+import { feedsReachable, getCalendar, getEmail, getInbox, getNews } from './sources';
+import { getNotionNotes } from './notion';
 import { getWeather } from './weather';
+
+/**
+ * Breaks the planner remembers: enough for its item cooldowns (a headline rests 12 hours, a mail 6) to hold over a
+ * long session. The prompt shows only the newest few.
+ */
+export const RECENT_BREAKS = 60;
 
 export interface ContextSongs {
   songBefore?: TrackSummary;
@@ -29,25 +37,32 @@ export async function buildContext(station: Station, songs: ContextSongs = {}, o
   const nowMs = opts.now ?? Date.now();
   const date = new Date(nowMs);
   const budget = opts.budgetMs ?? 8000;
-  const [profile, settings, recentBreaks] = await Promise.all([getProfile(), getSettings(), listBreaks(station.id, 8)]);
+  const [profile, settings, recentBreaks] = await Promise.all([getProfile(), getSettings(), listBreaks(station.id, RECENT_BREAKS)]);
   const seg = station.segments;
   const conn = settings.connections;
 
   const weatherOn = seg.weather && profile.location && conn.weather?.enabled !== false;
   const calendarOn = seg.calendar && (conn.calendar?.google || (conn.calendar?.icsUrls?.length ?? 0) > 0);
   const emailOn = seg.email && (conn.email?.gmail || conn.email?.imap);
-  const newsOn = seg.news && station.newsFeeds.length > 0 && conn.news?.enabled !== false;
+  // a station with no feeds of its own reads the account's (the listener's region defaults unless they chose others)
+  const account = accountNews(conn.news, { place: profile.location, ...deviceHints() });
+  const feeds = stationFeeds(station, account);
+  // the default feeds only where they can be read (feeds the listener chose were checked when added)
+  const chosen = station.newsFeeds.length > 0 || account.custom;
+  const newsOn = seg.news && feeds.length > 0 && account.enabled && (chosen || feedsReachable());
+  // Notion pages the listener chose go with their own notes
+  const notionNotes = seg.notes && conn.notion?.connected ? within(getNotionNotes(nowMs), budget) : undefined;
 
   const [weather, calendar, email, news, inbox] = await Promise.all([
     weatherOn ? within(getWeather(profile.location!, profile.units), budget) : undefined,
     calendarOn ? within(getCalendar(conn.calendar, nowMs), budget) : undefined,
     emailOn ? within(getEmail(conn.email), budget) : undefined,
-    newsOn ? within(getNews(station.newsFeeds), budget) : undefined,
+    newsOn ? within(getNews(feeds), budget) : undefined,
     within(getInbox(conn.aiApps?.enabled !== false, nowMs), budget),
   ]);
 
   const lifeEvents = seg.lifeEvents ? dueLifeEvents(profile.lifeEvents, nowMs).map((i) => i.event) : [];
-  const notes = seg.notes ? activeNotes(profile.notes, nowMs) : [];
+  const notes = seg.notes ? [...activeNotes(profile.notes, nowMs), ...((await notionNotes) ?? [])] : [];
   const reminders = seg.reminders ? dueReminders(profile.reminders, nowMs) : [];
 
   return {

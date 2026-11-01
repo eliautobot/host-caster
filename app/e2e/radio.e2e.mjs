@@ -118,6 +118,10 @@ await page.getByRole('switch', { name: 'Shuffle' }).click();
 // a break after every song: two breaks back to back test the talk-over-intro hand-off
 await page.getByRole('slider', { name: 'Talk every' }).focus();
 await page.keyboard.press('Home');
+// talk mix Music: every break names the song that just played too (the default leans to the listener's day and
+// back-announces only one break in three)
+await page.getByRole('slider', { name: 'Talk mix' }).focus();
+await page.keyboard.press('Home');
 await page.getByRole('button', { name: 'Save', exact: true }).click();
 await wait(500);
 
@@ -185,7 +189,7 @@ if (first) {
   check('both hosts talk', voices.size >= 2, [...voices].join(','));
   check('break sits between song 1 and 2', first.songBefore?.title === songOne && first.songAfter?.title === songTwo, `${first.songBefore?.title} -> ${first.songAfter?.title}`);
   const text = first.lines.map((l) => l.text).join(' ');
-  check('song that played is back-announced', text.toLowerCase().includes(songOne.toLowerCase()));
+  check('song that played is back-announced (talk mix: Music)', text.toLowerCase().includes(songOne.toLowerCase()));
   check('next song introduced', text.toLowerCase().includes(songTwo.toLowerCase()));
   const all = (await page.evaluate(() => window.__breaks)).flatMap((b) => b.lines.map((l) => l.text)).join(' ');
   check('no made-up songs', !/midnight city|m83|fleetwood/i.test(all));

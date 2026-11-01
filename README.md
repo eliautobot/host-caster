@@ -43,7 +43,10 @@ Screenshots from a demo install with demo songs.
 - Two or more hosts hold a real conversation: one script from a shared brain, or turn by turn when each host has
   its own.
 - Choose what hosts talk about per station: the songs, time of day, weather, your calendar, email, news, life
-  events, notes, reminders and fun facts. Choose how often they talk (every 1 to 10 songs) and for how long.
+  events, notes, reminders, Notion pages and fun facts. Choose how often they talk (every 1 to 10 songs), for how
+  long, and the **talk mix**: more about the music or more about your day.
+- **Your day first**: every break carries one item from your day when there is one, and the first break of a session
+  and of each hour is a short rundown (next events, reminders, weather, a headline or two).
 - **Call in**: talk to the hosts by voice or by typing, and they answer on air.
 - **On-air history** of every break, with the songs around it.
 - Breaks are written while the song plays. If one is not ready in time, the music simply goes on: never silence.
@@ -73,8 +76,12 @@ Screenshots from a demo install with demo songs.
 
 **Your day, on air**
 - Weather (Open-Meteo, no key), Google Calendar or any calendar link (ICS), Gmail or any IMAP mailbox (through your
-  server), RSS news, life events, notes and reminders. Every source keeps its last snapshot, so the radio keeps
-  working offline.
+  server), RSS news (public feeds for your region by default, or your own), life events, notes and reminders. Every
+  source keeps its last snapshot, so the radio keeps working offline.
+- **Notion**: one-tap sign-in through your server's own Notion connection. Hosts read the pages you pick and, only
+  when you ask on a call or from your AI app, add a to-do or note to a Host-Caster page and say so on air (activity
+  log with Undo, never touching what you wrote). Setup in [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md).
+- **What your hosts can see**: a settings page that shows every source as the hosts get it, and the next break.
 - **AI apps**: connect ChatGPT, Claude and other assistants (MCP), and they can pass notes, segments, song requests
   and birthdays to your hosts.
 

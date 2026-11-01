@@ -37,6 +37,8 @@ export interface UpdateState {
   lastCheck?: number;
   /** The manifest from the last successful check, so a launch between checks still shows the notice. */
   release?: ReleaseManifest;
+  /** The manifest URL it came from: a cached release from another address (another build) is ignored. */
+  source?: string;
   /** "Later" on this versionCode until this time. */
   snoozed?: { versionCode: number; until: number };
 }
@@ -104,6 +106,7 @@ async function readState(): Promise<UpdateState> {
   return rec?.value && typeof rec.value === 'object' ? rec.value : {};
 }
 
+/** The parsed manifest; null when the site has none (404, 410); throws when the check itself failed. */
 async function fetchManifest(url: string, timeoutMs: number): Promise<unknown> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -112,7 +115,8 @@ async function fetchManifest(url: string, timeoutMs: number): Promise<unknown> {
       fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' }, signal: ctrl.signal }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs + 500)),
     ]);
-    if (!res.ok) return null;
+    if (res.status === 404 || res.status === 410) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } finally {
     clearTimeout(timer);
@@ -120,8 +124,9 @@ async function fetchManifest(url: string, timeoutMs: number): Promise<unknown> {
 }
 
 /**
- * Asks the website (at most every CHECK_EVERY_MS unless force) and decides. Network or format problems are quiet:
- * the answer is then 'none' and the next launch tries again.
+ * Asks the website (at most every CHECK_EVERY_MS unless force) and decides. Quiet on problems: a failed check (offline,
+ * timeout, server error) keeps the last good manifest for the next launch; "no manifest" (404) or a malformed one
+ * clears it. fetchJson returns the parsed JSON, or null when the site has no manifest, and throws when it failed.
  */
 export async function checkForUpdate(opts: {
   installedCode: number;
@@ -131,20 +136,19 @@ export async function checkForUpdate(opts: {
   fetchJson?: (url: string) => Promise<unknown>;
 }): Promise<UpdateDecision> {
   const now = opts.now ?? Date.now();
-  const state = await readState();
-  if (!opts.force && !isDue(state, now)) return decide(parseManifest(state.release), opts.installedCode, state, now);
   const url = opts.url ?? UPDATE_MANIFEST_URL;
-  let raw: unknown = null;
+  const state = await readState();
+  const cached = state.source === url ? parseManifest(state.release) : null;
+  if (!opts.force && !isDue(state, now) && state.source === url) return decide(cached, opts.installedCode, state, now);
+  let release: ReleaseManifest | null;
   try {
-    raw = await (opts.fetchJson ?? ((u) => fetchManifest(u, 10_000)))(url);
+    release = parseManifest(await (opts.fetchJson ?? ((u) => fetchManifest(u, 10_000)))(url));
   } catch {
-    raw = null;
+    release = cached;
   }
-  const release = parseManifest(raw);
-  // A failed check keeps the last good manifest; a good one replaces it (a withdrawn release disappears).
-  const next: UpdateState = { ...state, lastCheck: now, release: raw === null ? state.release : (release ?? undefined) };
+  const next: UpdateState = { ...state, lastCheck: now, source: url, release: release ?? undefined };
   await kvSet<UpdateState>(STATE_KEY, next).catch(() => undefined);
-  return decide(raw === null ? parseManifest(state.release) : release, opts.installedCode, state, now);
+  return decide(release, opts.installedCode, state, now);
 }
 
 /** "Later": hide this optional update for SNOOZE_MS (a required one comes back at the next launch). */

@@ -101,6 +101,11 @@ function providerUrls(env) {
       apiBase: trimSlash(env.X_API_BASE ?? 'https://api.x.com'),
     },
     elevenlabsBase: trimSlash(env.ELEVENLABS_API_BASE ?? 'https://api.elevenlabs.io'),
+    // Notion connection (hosts read the pages a user shares and add notes when asked). OAuth and API share one base.
+    notion: {
+      authUrl: env.NOTION_AUTH_URL ?? 'https://api.notion.com/v1/oauth/authorize',
+      apiBase: trimSlash(env.NOTION_API_BASE ?? 'https://api.notion.com'),
+    },
     // Sign in with ChatGPT (ChatGPT plan usage for open-source apps). The resource stays the public API audience.
     chatgpt: {
       issuer: trimSlash(env.CHATGPT_ISSUER ?? 'https://auth.openai.com'),
@@ -147,6 +152,14 @@ export function loadConfig(env = process.env) {
     google: Object.freeze({ ...google, ...urls.google, enabled: googleOn }),
     x: Object.freeze({ ...x, ...urls.x, enabled: xOn }),
     elevenlabsBase: urls.elevenlabsBase,
+    /** Notion: each user connects their own workspace through the server owner's public Notion connection */
+    notion: Object.freeze({
+      ...urls.notion,
+      clientId: env.NOTION_CLIENT_ID ?? '',
+      clientSecret: env.NOTION_CLIENT_SECRET ?? '',
+      enabled: Boolean(env.NOTION_CLIENT_ID && env.NOTION_CLIENT_SECRET),
+      version: env.NOTION_VERSION ?? '2026-03-11',
+    }),
     /** "Use your ChatGPT plan" brains: each user signs in with their own ChatGPT account (no keys to configure) */
     chatgpt: Object.freeze({
       ...urls.chatgpt,

@@ -5,7 +5,14 @@ import { isNative } from '../native';
 import type { CalendarEvent, Connections, EmailSummary, Headline, InboxItem } from '../types';
 import { cached } from './cache';
 import { parseIcs } from './ics';
+import { feedName, knownFeedName } from './news';
 import { parseFeed } from './rss';
+
+/**
+ * Can this app read any news feed? The phone apps fetch directly and a signed-in web app through its server; a web
+ * browser on its own is refused by most feeds (no CORS headers).
+ */
+export const feedsReachable = (): boolean => isNative || (api.available && api.signedIn);
 
 /** ICS/RSS text: direct on native (no CORS), through the server on web when signed in, else direct. */
 export async function fetchText(url: string): Promise<string> {
@@ -26,17 +33,31 @@ export async function fetchText(url: string): Promise<string> {
 
 const HOURS = 36;
 
-export async function getCalendar(conn: Connections['calendar'], now = Date.now()): Promise<CalendarEvent[]> {
+export interface SourceOptions {
+  /** fetch now, whatever the cache holds ("What your hosts can see", Refresh) */
+  fresh?: boolean;
+}
+
+const ttl = (ms: number, opts?: SourceOptions) => (opts?.fresh ? 0 : ms);
+
+/** The kv cache keys behind each source (their fetch time and last error are shown in Settings). */
+export const sourceKeys = {
+  calendar: (conn: Connections['calendar']) => [...(conn?.google ? ['calendar:google'] : []), ...(conn?.icsUrls ?? []).map((u) => `calendar:ics:${u}`)],
+  email: (conn: Connections['email']) => [...(conn?.gmail ? ['email:gmail'] : []), ...(conn?.imap ? ['email:imap'] : [])],
+  news: (feeds: string[]) => feeds.slice(0, 6).map((u) => `news:${u}`),
+};
+
+export async function getCalendar(conn: Connections['calendar'], now = Date.now(), opts?: SourceOptions): Promise<CalendarEvent[]> {
   const out: CalendarEvent[] = [];
   if (conn?.google) {
-    const c = await cached('calendar:google', 10 * 60_000, async () => {
+    const c = await cached('calendar:google', ttl(10 * 60_000, opts), async () => {
       if (!api.available || !api.signedIn) throw new Error('offline');
       return (await integrations.calendar(HOURS)).events;
     });
     out.push(...(c.value ?? []));
   }
   for (const url of conn?.icsUrls ?? []) {
-    const c = await cached(`calendar:ics:${url}`, 30 * 60_000, () => fetchText(url));
+    const c = await cached(`calendar:ics:${url}`, ttl(30 * 60_000, opts), () => fetchText(url));
     if (c.value) out.push(...parseIcs(c.value, now - 3600_000, now + HOURS * 3600_000));
   }
   // drop finished events; dedupe by title+start (the same event in two calendars)
@@ -53,17 +74,17 @@ export async function getCalendar(conn: Connections['calendar'], now = Date.now(
     .slice(0, 8);
 }
 
-export async function getEmail(conn: Connections['email']): Promise<EmailSummary[]> {
+export async function getEmail(conn: Connections['email'], opts?: SourceOptions): Promise<EmailSummary[]> {
   const out: EmailSummary[] = [];
   if (conn?.gmail) {
-    const c = await cached('email:gmail', 10 * 60_000, async () => {
+    const c = await cached('email:gmail', ttl(10 * 60_000, opts), async () => {
       if (!api.available || !api.signedIn) throw new Error('offline');
       return (await integrations.email(10)).messages;
     });
     out.push(...(c.value ?? []));
   }
   if (conn?.imap) {
-    const c = await cached('email:imap', 10 * 60_000, async () => {
+    const c = await cached('email:imap', ttl(10 * 60_000, opts), async () => {
       if (!api.available || !api.signedIn) throw new Error('offline');
       return (await request<{ messages: EmailSummary[] }>('GET', '/api/imap/summary')).messages;
     });
@@ -72,14 +93,22 @@ export async function getEmail(conn: Connections['email']): Promise<EmailSummary
   return out.sort((a, b) => Number(b.important) - Number(a.important) || b.at - a.at).slice(0, 6);
 }
 
-export async function getNews(feeds: string[]): Promise<Headline[]> {
-  const all: Headline[] = [];
-  for (const url of feeds.slice(0, 6)) {
-    const c = await cached(`news:${url}`, 30 * 60_000, async () => parseFeed(await fetchText(url), new URL(url).hostname.replace(/^www\./, '')));
-    all.push(...(c.value ?? []).slice(0, 6));
-  }
-  // newest first, round-robin-ish across feeds by taking the top of each first
-  return all.sort((a, b) => (b.at ?? 0) - (a.at ?? 0)).slice(0, 10);
+export async function getNews(feeds: string[], opts?: SourceOptions): Promise<Headline[]> {
+  // all feeds at once: six slow feeds one after another would not fit a break's time budget
+  const lists = await Promise.all(
+    feeds.slice(0, 6).map(async (url) => {
+      const c = await cached(`news:${url}`, ttl(30 * 60_000, opts), async () => parseFeed(await fetchText(url), feedName(url)));
+      // a default feed is named the way people say it ("NPR News", not "NPR Topics: News")
+      const name = knownFeedName(url);
+      return (c.value ?? []).slice(0, 6).map((h) => (name ? { ...h, source: name } : h));
+    }),
+  );
+  // the newest of each feed first, then the rest newest first: every feed gets a say
+  const firsts = lists.map((l) => l[0]).filter((h): h is Headline => Boolean(h));
+  const rest = lists.flatMap((l) => l.slice(1));
+  const byTime = (a: Headline, b: Headline) => (b.at ?? 0) - (a.at ?? 0);
+  const seen = new Set<string>();
+  return [...firsts.sort(byTime), ...rest.sort(byTime)].filter((h) => !seen.has(h.id) && seen.add(h.id)).slice(0, 10);
 }
 
 const INBOX_KEY = 'inbox:items';
