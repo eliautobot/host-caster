@@ -25,6 +25,7 @@ export {
   isOnline,
   isIncludedCode,
   hoursText,
+  planSiteName,
   type AdminSummary,
   type BillingStatus,
   type MeterCategory,

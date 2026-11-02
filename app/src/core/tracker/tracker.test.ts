@@ -191,6 +191,14 @@ describe('extract', () => {
     const out = extractItems({ calendar: [ev({ organizer: 'Dana Reyes' })], dossiers: new Map([[d.key, d]]), now: NOW, tz: NY })
     expect(out.map((o) => o.kind)).toEqual(['prepare'])
   })
+  it('a dossier line that only repeats "answer the invitation" (or carries raw field words) is not a second to-do', () => {
+    const d = {
+      key: 'calendar:primary:e1',
+      prepare: ['Respond to the invitation, which still shows your response as needsAction.', 'RSVP to the invite', 'Bring the three vendor quotes'],
+    } as Dossier
+    const out = extractItems({ calendar: [ev({ organizer: 'Dana Reyes', myResponse: 'needsAction' })], dossiers: new Map([[d.key, d]]), now: NOW, tz: NY })
+    expect(out.map((o) => `${o.kind}: ${o.what}`)).toEqual(['invite: Answer the invitation: Q4 budget review', 'prepare: Bring the three vendor quotes'])
+  })
   it('a request from a known sender, with a due time from the mail', () => {
     const out = extractItems({
       email: [mail({ address: 'dana@example.com', body: 'Hi Sam. Can you send me the three vendor quotes by 2 PM today? Thanks.' })],
@@ -253,6 +261,12 @@ describe('brief: bounded mentions', () => {
   it('morning rundown: up to two due today', () => {
     const items = [1, 2, 3].map((h) => item({ what: `Today ${h}`, due: new Date(NOW + h * 3600_000).toISOString() }))
     expect(pickForBreak(items, { now: NOW, morning: true, recentMentions: 0 }).map((p) => p.why)).toEqual(['rundown', 'rundown'])
+  })
+  it('morning rundown: something overdue and a be-careful warning are never crowded out by today', () => {
+    const today = [1, 2, 3].map((h) => item({ what: `Today ${h}`, due: new Date(NOW + h * 3600_000).toISOString() }))
+    const late = item({ what: 'Send the lease', due: new Date(NOW - 3600_000).toISOString() })
+    const c = item({ source: { type: 'email', id: 'm', label: 'Email from Prize Center' }, flags: { careful: true, why: 'asks for money or payment' } })
+    expect(pickForBreak([...today, late, c], { now: NOW, morning: true, recentMentions: 0 }).map((p) => p.why)).toEqual(['overdue', 'careful', 'rundown'])
   })
   it('overdue -> follow up; looks done -> ask; careful -> warning once', () => {
     expect(pickForBreak([item({ due: new Date(NOW - 3600_000).toISOString() })], { now: NOW, recentMentions: 0 })[0].why).toBe('overdue')

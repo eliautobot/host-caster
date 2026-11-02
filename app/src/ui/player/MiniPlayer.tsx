@@ -8,6 +8,7 @@ import { OnAirStrip } from '../radio/OnAirStrip';
 import { usePlayerErrors } from './hooks';
 import { useArtColor } from './useArtColor';
 import { usePlayerView } from './usePlayerView';
+import { YouTubeHiddenChip } from './YouTubeHiddenChip';
 import './player.css';
 
 export function MiniPlayer() {
@@ -18,6 +19,7 @@ export function MiniPlayer() {
   return (
     <div className="aw-mini-dock">
       <OnAirStrip variant="mini" />
+      <YouTubeHiddenChip variant="mini" />
       <div className="aw-mini" style={{ '--c': color } as CSSProperties}>
         <button type="button" className="aw-mini__open" onClick={() => navigate('/now-playing')} aria-label="Open Now Playing">
           {v.track ? (

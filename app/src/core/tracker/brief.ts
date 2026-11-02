@@ -105,7 +105,8 @@ export function pickForBreak(items: TrackedItem[], opts: PickOptions): { item: T
   }
   if (opts.callIn) return out.slice(0, 1)
   let budget = Math.max(0, MAX_PER_HOUR - opts.recentMentions)
-  const slots = opts.morning ? 2 : 1
+  // a morning rundown can carry three: something overdue and a be-careful warning are never crowded out by today's items
+  const slots = opts.morning ? 3 : 1
   const add = (i: TrackedItem, why: Why) => {
     if (budget <= 0 || out.length >= slots + (out[0]?.why === 'reminder' ? 1 : 0) || out.some((o) => o.item.id === i.id)) return
     out.push({ item: i, why })
@@ -118,8 +119,9 @@ export function pickForBreak(items: TrackedItem[], opts: PickOptions): { item: T
   const soonMs = (i: TrackedItem) => (dueMs(i) ?? Infinity) - now
   const soon = mine.filter((i) => soonMs(i) >= 0 && soonMs(i) <= (i.dueAllDay ? 36 : 6) * 3600_000 && fresh(i)).sort((a, b) => soonMs(a) - soonMs(b))
   if (opts.morning) {
-    for (const i of soon.slice(0, 2)) add(i, 'rundown')
     for (const i of overdue.slice(0, 1)) add(i, 'overdue')
+    for (const i of careful.slice(0, 1)) add(i, 'careful')
+    for (const i of soon.slice(0, 2)) add(i, 'rundown')
   }
   for (const i of careful.slice(0, 1)) add(i, 'careful')
   for (const i of looksDone.slice(0, 1)) add(i, 'looks-done')

@@ -35,6 +35,10 @@ const BILL = /\b(bill|invoice|statement|amount due|payment due|due date|balance 
 const DELIVERY = /\b(shipped|out for delivery|arriving|delivery (?:is )?(?:scheduled|expected)|has been delivered|tracking number|on its way|package)\b/i
 const ASK = /\b(can you|could you|would you|please|need you to|do you mind|are you able to|let me know|reply by|by (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|today|tonight|end of (?:day|week)|eod|noon|\d{1,2}(?::\d{2})?\s*(?:am|pm)))\b/i
 const NOREPLY = /\b(no-?reply|do-?not-?reply|notifications?|mailer|newsletter|news@|updates@|marketing)\b/i
+/** A dossier line that only says to answer the invitation (that is its own Your list item). */
+const ANSWER_INVITE = /\b(respond|reply|answer|rsvp|accept|decline)\b[^.]{0,40}\b(invit\w*|rsvp)\b|\bresponse (?:status )?(?:as |is )?needs ?action\b/i
+/** Raw API field words a person never says (needsAction, responseStatus, organizerSelf ...). */
+const RAW_FIELD = /\b(needsAction|responseStatus|organizerSelf|attendeesOmitted|myResponse)\b/
 
 function firstName(from?: string): string | undefined {
   const f = (from ?? '').replace(/<[^>]*>/g, '').replace(/["']/g, '').trim()
@@ -110,6 +114,9 @@ export function extractItems(input: ExtractInput): TrackedDraft[] {
           // a dossier is written from outside content: a careful line in it is dropped, never tracked
           const pc = caution(p)
           if (pc.careful || c.instructs) continue
+          // answering the invitation is its own item above; a line that only repeats it (or carries Google's raw
+          // field words like "needsAction") is not a separate to-do
+          if (ANSWER_INVITE.test(p) || RAW_FIELD.test(p)) continue
           out.push({
             what: speakable(p, 140),
             kind: 'prepare',

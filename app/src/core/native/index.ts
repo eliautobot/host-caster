@@ -1,10 +1,10 @@
 // core/native (owner: native agent): thin wrappers over the Android/iOS shells. Every call is safe on web
 // (no-op, web fallback, or 'unsupported').
-export { isNative, platform, hasPlugin, sellsPlans, distribution } from './platform';
+export { isNative, platform, hasPlugin, sellsPlans, distribution, planLink, linksToPlans } from './platform';
 export { nativeTts, type DeviceVoice, type SpeakOptions } from './tts';
 export { audioFocus, mediaNotification, type MediaNotificationOptions } from './audio';
 export { anyApp, type AnyAppNowPlaying, type AnyAppStateEvent } from './anyApp';
-export { openAuthUrl, openExternal, isWebUrl, onDeepLink, onBrowserClosed, APP_SCHEME } from './links';
+export { openAuthUrl, openExternal, isWebUrl, onDeepLink, onBrowserClosed, onForeground, APP_SCHEME } from './links';
 export {
   speechToText,
   speechSupport,

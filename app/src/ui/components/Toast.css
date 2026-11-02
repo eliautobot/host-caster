@@ -88,3 +88,8 @@
     background: var(--hover);
   }
 }
+
+/* centred in the room the docked YouTube window leaves (computers: a column beside the page) */
+html[data-yt-dock] .aw-toaster {
+  left: calc(50% + (var(--yt-res-left, 0px) - var(--yt-res-right, 0px)) / 2);
+}

@@ -1,0 +1,151 @@
+/* The docked YouTube window (core/services/youtube/host.ts sets its place and size) and the "YouTube hidden" chip. */
+.aw-yt-mini {
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-2);
+  color: var(--text-2);
+}
+
+.aw-yt-mini__bar {
+  justify-content: space-between;
+  gap: 2px;
+  padding: 0 2px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.aw-yt-mini[data-size='small'] .aw-yt-mini__bar {
+  padding: 2px 0;
+}
+
+.aw-yt-mini[data-dragging] .aw-yt-mini__bar {
+  cursor: grabbing;
+}
+
+.aw-yt-mini__grip {
+  flex: 1;
+  align-self: stretch;
+  pointer-events: none;
+}
+
+/* the handle mark: centred on the whole bar (large), on the free part of the side bar (small) */
+.aw-yt-mini__grip::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--line-strong);
+  transform: translate(-50%, -50%);
+}
+
+.aw-yt-mini[data-size='small'] .aw-yt-mini__grip {
+  position: relative;
+}
+
+.aw-yt-mini[data-size='small'] .aw-yt-mini__grip::before {
+  width: 4px;
+  height: 32px;
+}
+
+.aw-yt-mini__btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+@media (hover: hover) {
+  .aw-yt-mini__btn:hover {
+    background: var(--surface-3);
+    color: var(--text);
+  }
+}
+
+.aw-yt-mini__btn:active {
+  background: var(--surface-3);
+}
+
+.aw-yt-mini__btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* "YouTube hidden": a tap shows the video again */
+.aw-yt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 6px 0 10px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--surface-3);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--inner-line);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.aw-yt-chip svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--text-2);
+}
+
+.aw-yt-chip__action {
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: var(--weight-semibold);
+}
+
+@media (hover: hover) {
+  .aw-yt-chip:hover {
+    background: color-mix(in srgb, var(--surface-3) 80%, var(--text));
+  }
+}
+
+.aw-yt-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* phone: above the mini player, as the on-air strip */
+.aw-yt-chip--mini {
+  align-self: flex-start;
+  background: var(--surface-2);
+  box-shadow: var(--inner-line), var(--shadow-2);
+}
+
+.aw-yt-chip--sheet {
+  align-self: center;
+  margin: var(--space-2) auto 0;
+}
+
+/* the update notice is centred like toasts: in the room the docked window leaves */
+html[data-yt-dock] .aw-update {
+  left: calc(50% + (var(--yt-res-left, 0px) - var(--yt-res-right, 0px)) / 2);
+}

@@ -12,6 +12,7 @@ import { Queue } from '../player/Queue';
 import { useArtColor, useArtworkUrl } from '../player/useArtColor';
 import { usePlayerView } from '../player/usePlayerView';
 import { OnAirStrip } from '../radio/OnAirStrip';
+import { YouTubeHiddenChip } from '../player/YouTubeHiddenChip';
 import { ServiceVideoSlot } from './services/ServiceVideoSlot';
 import type { ScreenProps } from '.';
 import './NowPlaying.css';
@@ -103,6 +104,7 @@ export default function NowPlaying({ query }: ScreenProps) {
           <Scrubber variant="sheet" />
           <Transport size="lg" />
           <OnAirStrip variant="sheet" />
+          <YouTubeHiddenChip variant="sheet" />
           {desktop && (
             <div className="aw-np__extras">
               <VolumeControl width={200} />

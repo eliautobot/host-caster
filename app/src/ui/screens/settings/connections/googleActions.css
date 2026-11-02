@@ -13,6 +13,10 @@
   -webkit-line-clamp: 3;
   line-clamp: 3;
 }
+/* the switch names are the consent itself: wrap on phones instead of "Hosts can use my G..." */
+.aw-gactions__row .aw-acct-row__title {
+  white-space: normal;
+}
 .aw-gactions__fix,
 .aw-gactions__lists {
   flex-basis: 100%;

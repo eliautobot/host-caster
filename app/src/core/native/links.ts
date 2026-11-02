@@ -63,7 +63,7 @@ function deliver(url: string): void {
   lastAt = now;
   // The sign-in tab stays open on iOS after the redirect. Android already removed it (MainActivity is singleTask),
   // and Browser.close() there re-creates the controller activity, which opens the sign-in URL a second time.
-  if (platform === 'ios' && url.startsWith(`${APP_SCHEME}://auth`)) void Browser.close().catch(() => {});
+  if (platform === 'ios' && (url.startsWith(`${APP_SCHEME}://auth`) || url.startsWith(`${APP_SCHEME}://plan`))) void Browser.close().catch(() => {});
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('hostcaster:deeplink', { detail: url }));
   if (!subscribers.size) {
     queued.push(url);
@@ -113,4 +113,35 @@ export function onDeepLink(cb: LinkCb): () => void {
 /** Start catching links at boot even before a subscriber exists (they are queued). */
 export function startDeepLinks(): void {
   start();
+}
+
+/**
+ * The app came back to the foreground (from the browser, the app switcher or the lock screen): the page became visible
+ * again, plus Capacitor's resume on the phones. Calls coming within a second of each other count once.
+ */
+export function onForeground(cb: () => void): () => void {
+  if (typeof document === 'undefined') return () => {};
+  let last = 0;
+  const fire = () => {
+    if (Date.now() - last < 1000) return;
+    last = Date.now();
+    cb();
+  };
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') fire();
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  let removed = false;
+  let handle: { remove: () => Promise<void> } | undefined;
+  if (isNative) {
+    void App.addListener('resume', fire).then((h) => {
+      if (removed) void h.remove();
+      else handle = h;
+    });
+  }
+  return () => {
+    removed = true;
+    document.removeEventListener('visibilitychange', onVisible);
+    void handle?.remove();
+  };
 }

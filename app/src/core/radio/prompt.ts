@@ -193,6 +193,9 @@ export function factsSheet(plan: BreakPlan, packet: ContextPacket, station: Stat
     plan.followUp
       ? `ANSWER TO THE LISTENER'S QUESTION (${plan.followUp.found ? 'checked in their own calendar, email, notes and lookups' : 'it was looked for and not found'}): ${plan.followUp.answer}`
       : '',
+    packet.youtubeHidden
+      ? 'YOUTUBE VIDEO HIDDEN: the listener hid the YouTube video, so their YouTube songs wait and other songs play meanwhile. You may say so once, briefly and warmly (for example: the YouTube songs wait until you bring the video back). Never blame or nag.'
+      : '',
     ...topicFacts(plan, packet, now),
     memorySheet(packet.memory),
     listSheet(packet.tracker),

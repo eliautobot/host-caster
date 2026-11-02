@@ -11,6 +11,7 @@ import { useSession } from '@/state/session';
 import { runAction } from '../actions';
 import { Button, LogoMark, toast } from '../components';
 import { PlanCards, planName } from '../online/parts';
+import { PlanLinkButton, usePlanLink } from '../online/PlanLink';
 import { BareBackdrop } from './parts/BareBackdrop';
 import type { ScreenProps } from '.';
 import './Bare.css';
@@ -31,6 +32,7 @@ export default function Plans({ query }: ScreenProps) {
   const plans = status?.plans ?? config?.online?.plans ?? [];
   const billing = config?.online?.billing !== false;
   const freePlan = config?.online?.freePlan !== false;
+  const link = usePlanLink();
 
   useEffect(() => {
     void usePlan.getState().refresh();
@@ -85,17 +87,22 @@ export default function Plans({ query }: ScreenProps) {
             </div>
           </>
         ) : !sellsPlans ? (
-          // phone apps: nothing is sold here (store payment rules); a plan from the web shows up after sign-in
+          // phone apps: nothing is sold here (store payment rules); the plan link opens the website, and a plan from
+          // there shows up here when the app comes back
           <>
             <h1 className="aw-bare__title">{freePlan ? 'Welcome to Host-Caster' : 'No plan on this account'}</h1>
             <p className="aw-bare__lead">
               {freePlan ? 'Bring your own AI and voices: your keys, or models on your own computer.' : 'This account has no active plan, so Host-Caster cannot start here.'}
+              {link.shown ? ` ${link.note}` : ''}
             </p>
-            {freePlan && (
+            {(freePlan || link.shown) && (
               <div className="aw-bare__actions">
-                <Button variant="primary" size="lg" block iconRight={ArrowRight} onClick={() => void continueSetup()} data-start-free>
-                  Continue
-                </Button>
+                {freePlan && (
+                  <Button variant="primary" size="lg" block iconRight={ArrowRight} onClick={() => void continueSetup()} data-start-free>
+                    Continue
+                  </Button>
+                )}
+                <PlanLinkButton size="lg" block variant={freePlan ? 'secondary' : 'primary'} />
               </div>
             )}
           </>

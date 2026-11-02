@@ -227,3 +227,112 @@ describe('player: YouTube only on screen (phone apps)', () => {
     expect(p.state.track?.id).toBe('r1');
   });
 });
+
+describe('player: the listener hides the YouTube video (phone and desktop apps)', () => {
+  let youtube: Fake;
+  let other: Fake;
+  let p: Player;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    youtube = new Fake('youtube');
+    other = new Fake('server');
+    p = new Player({ graph: null, decks: [new NoDeck(), new NoDeck()], persist: false });
+    p.registerAdapter(youtube);
+    p.registerAdapter(other);
+    p.setScreenOnly((t) => t.source === 'youtube');
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  async function start(list: Track[]) {
+    const go = p.playQueue(list);
+    await vi.advanceTimersByTimeAsync(10);
+    await go;
+  }
+  const ids = () => p.state.queue.map((t) => t.id);
+
+  it('hiding stops the YouTube song and the next song that may play goes on; the YouTube songs wait behind it', async () => {
+    await start([yt('y1'), yt('y2'), radio('r1'), yt('y3'), radio('r2')]);
+    expect(p.state.track?.id).toBe('y1');
+    p.setVideoHidden(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.track?.id).toBe('r1');
+    expect(p.state.status).toBe('playing');
+    expect(p.state.waiting).toBeUndefined();
+    expect(youtube.log).toEqual(['load y1', 'play y1', 'pause y1', 'unload']);
+    expect(ids()).toEqual(['r1', 'y1', 'y2', 'y3', 'r2']);
+    // the YouTube songs are skipped while hidden
+    other.end();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.track?.id).toBe('r2');
+    expect(p.state.status).toBe('playing');
+    expect(ids()).toEqual(['r1', 'r2', 'y1', 'y2', 'y3']);
+    expect(youtube.log.filter((l) => l.startsWith('play'))).toEqual(['play y1']);
+  });
+
+  it('nothing else to play: the YouTube song waits, paused, with the hidden-video note', async () => {
+    await start([yt('y1'), yt('y2')]);
+    p.setVideoHidden(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.track?.id).toBe('y1');
+    expect(p.state.status).toBe('paused');
+    expect(p.state.waiting).toBe('video');
+    // play is refused while hidden (no hidden YouTube playback)
+    await p.play();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.status).toBe('paused');
+    expect(p.state.waiting).toBe('video');
+    // shown again: it plays on, even after a long time (the listener asked for it)
+    await vi.advanceTimersByTimeAsync(SCREEN_RESUME_MS + 1000);
+    p.setVideoHidden(false);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.status).toBe('playing');
+    expect(p.state.track?.id).toBe('y1');
+    expect(p.state.waiting).toBeUndefined();
+  });
+
+  it('shown again, the YouTube songs play in their turn after the current song', async () => {
+    await start([yt('y1'), radio('r1'), radio('r2')]);
+    p.setVideoHidden(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(ids()).toEqual(['r1', 'y1', 'r2']);
+    p.setVideoHidden(false);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.track?.id).toBe('r1'); // the radio is not cut off
+    other.end();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.track?.id).toBe('y1');
+    expect(p.state.status).toBe('playing');
+  });
+
+  it('hidden while another song plays: the next YouTube song is skipped before anyone names it', async () => {
+    await start([radio('r1'), yt('y1'), radio('r2')]);
+    p.setVideoHidden(true);
+    expect(ids()).toEqual(['r1', 'r2', 'y1']);
+    expect(p.state.track?.id).toBe('r1');
+    expect(p.state.status).toBe('playing');
+  });
+
+  it('back on screen with the video still hidden: the song keeps waiting and the note says why', async () => {
+    await start([yt('y1')]);
+    p.setOnScreen(false);
+    expect(p.state.waiting).toBe('screen');
+    p.setVideoHidden(true);
+    p.setOnScreen(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.status).toBe('paused');
+    expect(p.state.waiting).toBe('video');
+    p.setVideoHidden(false);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.status).toBe('playing');
+  });
+
+  it('without the rule (web) hiding changes nothing', async () => {
+    p.setScreenOnly(undefined);
+    await start([yt('y1'), radio('r1')]);
+    p.setVideoHidden(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(p.state.track?.id).toBe('y1');
+    expect(p.state.status).toBe('playing');
+  });
+});

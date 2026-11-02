@@ -28,6 +28,13 @@ describe('prompt builder', () => {
     expect(facts).toContain('call them Sam');
   });
 
+  it('tells the hosts when the listener hid the YouTube video, only then', () => {
+    expect(factsSheet(plan(), packet(), station())).not.toContain('YOUTUBE VIDEO HIDDEN');
+    const facts = factsSheet(plan(), { ...packet(), youtubeHidden: true }, station());
+    expect(facts).toContain('YOUTUBE VIDEO HIDDEN');
+    expect(facts).toContain('the YouTube songs wait until you bring the video back');
+  });
+
   it('keeps email privacy-light: sender name and gist, no address or numbers', () => {
     const p = packet({ reminders: [], calendar: [], lifeEvents: [], news: [], notes: [] });
     const seg = { ...station().segments, email: true, time: false, weather: false, funFacts: false };

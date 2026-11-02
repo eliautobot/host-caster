@@ -715,6 +715,8 @@ export interface ContextPacket {
   dossiers?: Dossier[];
   /** heads-ups waiting for this break: they go first */
   headsUps?: HeadsUp[];
+  /** the listener hid the YouTube video (phone and desktop apps): YouTube songs wait until it shows again */
+  youtubeHidden?: boolean;
   /** answers to questions from the listener's AI app, by inbox item id */
   inboxAnswers?: Record<string, { answer: string; found: boolean }>;
   /** what the hosts remember about the listener, picked for this break (core/memory/brief.ts) */
@@ -762,9 +764,10 @@ export interface PlayerState {
   live?: boolean;
   /**
    * The phone apps play YouTube only while the app is on screen. 'screen': the current YouTube song waits, paused,
-   * until the app is back; 'resume': the app came back after a long time and offers to resume instead.
+   * until the app is back; 'resume': the app came back after a long time and offers to resume instead; 'video': the
+   * listener hid the YouTube window and nothing else may play, so the YouTube song waits until the video shows again.
    */
-  waiting?: 'screen' | 'resume';
+  waiting?: 'screen' | 'resume' | 'video';
 }
 
 export type RepeatMode = 'off' | 'all' | 'one';

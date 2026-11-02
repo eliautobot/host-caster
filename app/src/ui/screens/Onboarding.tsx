@@ -19,7 +19,7 @@ import { isOnline, type BillingStatus } from '@/core/api';
 import { usePlan } from '@/state/plan';
 import { applyIncluded } from '../online/setupIncluded';
 import { saveProfile, saveSettings, saveStation } from '@/core/db';
-import { platform, sellsPlans } from '@/core/native';
+import { linksToPlans, platform, sellsPlans } from '@/core/native';
 import type { StationSource } from '@/core/types';
 import { useHosts } from '@/state/hosts';
 import { useProfile } from '@/state/profile';
@@ -70,11 +70,11 @@ function OptionList<V extends string>({ options, value, onChange, label }: { opt
 }
 
 /** The Host-Caster Voices choice, by plan: what is included now, or which plans include it. */
-function voicesText(plan: BillingStatus | undefined): string {
+function voicesText(plan: BillingStatus | undefined, plansOffered: boolean): string {
   const premiumPlan = plan?.plans.find((p) => p.includes.premium);
   if (plan?.includes.premium) return 'Included with your plan: 21 premium ElevenLabs voices, plus 36 natural voices in 21 languages.';
   if (plan?.includes.voices) {
-    return `Included with your plan. Natural voices in 21 languages.${premiumPlan && sellsPlans ? ` Premium ElevenLabs voices come with ${premiumPlan.name}.` : ''}`;
+    return `Included with your plan. Natural voices in 21 languages.${premiumPlan && plansOffered ? ` Premium ElevenLabs voices come with ${premiumPlan.name}.` : ''}`;
   }
   return `Included with the ${premiumPlan ? 'Voices, Everything and Premium plans' : 'Voices or Everything plan'}. Natural voices in 21 languages.`;
 }
@@ -96,6 +96,8 @@ export default function Onboarding({ query }: ScreenProps) {
   // online edition: what the plan includes is the first choice
   const plan = usePlan((s) => s.status);
   const onlineEd = isOnline();
+  // plans sold here (web, desktop) or by the phone apps' link to the website (Settings, Plan and usage)
+  const plansOffered = sellsPlans || (linksToPlans && config?.online?.billing === true);
   const [voice, setVoice] = useState<VoiceChoice>('device');
   useEffect(() => {
     if (plan?.includes.brain) setBrain('included');
@@ -118,8 +120,8 @@ export default function Onboarding({ query }: ScreenProps) {
   }, [config?.serverLibrary]);
 
   const brainOptions: Option<BrainChoice>[] = [
-    // the phone apps sell no plans: Host-Caster AI is offered there only when the account has it
-    ...(onlineEd && (sellsPlans || plan?.includes.brain)
+    // a phone app without the plan link: Host-Caster AI is offered there only when the account has it
+    ...(onlineEd && (plansOffered || plan?.includes.brain)
       ? [{
           value: 'included' as const,
           icon: Sparkles,
@@ -134,19 +136,19 @@ export default function Onboarding({ query }: ScreenProps) {
   ];
 
   const voiceOptions: Option<VoiceChoice>[] = [
-    ...(sellsPlans || plan?.includes.voices
+    ...(plansOffered || plan?.includes.voices
       ? [{
           value: 'hostcaster' as const,
           icon: Sparkles,
           title: 'Host-Caster Voices',
-          text: voicesText(plan),
+          text: voicesText(plan, plansOffered),
         }]
       : []),
     { value: 'device', icon: Smartphone, title: 'This device’s voice', text: 'Free, works offline.' },
     { value: 'own', icon: Cloud, title: 'My own voices', text: 'ElevenLabs, OpenAI or Kokoro on your computer.' },
   ];
   // a Host-Caster pick that the plan does not include yet leads to the plan picker
-  const needsPlan = onlineEd && sellsPlans && ((brain === 'included' && !plan?.includes.brain) || (voice === 'hostcaster' && !plan?.includes.voices));
+  const needsPlan = onlineEd && plansOffered && ((brain === 'included' && !plan?.includes.brain) || (voice === 'hostcaster' && !plan?.includes.voices));
 
   const togglePick = (id: string) =>
     setPicked((p) => (p.includes(id) ? (p.length > 1 ? p.filter((x) => x !== id) : p) : p.length < 4 ? [...p, id] : p));

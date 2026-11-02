@@ -285,3 +285,60 @@
   opacity: 1;
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text);
 }
+
+/* ---------------------------------------------------------------- YouTube window */
+/* Phone and desktop apps: the docked YouTube window's room stays free, so it never covers the page
+   (core/services/youtube/host.ts and dock.ts set these while the window shows). */
+html[data-yt-dock] .aw-app[data-layout='phone'] .aw-main {
+  margin-top: var(--yt-res-top, 0px);
+  height: calc(100% - var(--yt-res-top, 0px) - var(--yt-res-bottom, 0px));
+}
+
+/* top corners: the band already keeps the status bar clear */
+html[data-yt-dock^='t'] .aw-app[data-layout='phone'] .aw-main {
+  --safe-top: 0px;
+}
+
+/* bottom corners: the page ends above the band, nothing scrolls under the mini player */
+html[data-yt-dock^='b'] .aw-app[data-layout='phone'] .aw-main {
+  padding-bottom: 20px;
+}
+
+html[data-yt-dock^='b'] .aw-app[data-layout='phone'] .aw-tabbar::before {
+  display: none;
+}
+
+/* the "YouTube hidden" chip sits above the mini player */
+html[data-yt-hidden] .aw-app[data-layout='phone'] .aw-main {
+  padding-bottom: calc(var(--tabbar-h) + var(--miniplayer-h) + var(--safe-bottom) + 58px);
+}
+
+html[data-yt-dock] .aw-app[data-layout='desktop'] .aw-main {
+  margin-left: var(--yt-res-left, 0px);
+  margin-right: var(--yt-res-right, 0px);
+}
+
+/* computers: the column reads as a panel, as the sidebar and the page; the window sits at its top or bottom */
+html[data-yt-dock] .aw-app[data-layout='desktop']::after {
+  content: '';
+  position: fixed;
+  top: var(--panel-gap);
+  bottom: var(--playerbar-h);
+  width: calc(var(--yt-res-left, 0px) + var(--yt-res-right, 0px) - var(--panel-gap));
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  pointer-events: none;
+}
+
+html[data-yt-dock$='r'] .aw-app[data-layout='desktop']::after {
+  right: var(--panel-gap);
+}
+
+html[data-yt-dock$='l'] .aw-app[data-layout='desktop']::after {
+  left: calc(var(--panel-gap) + var(--sidebar-w) + var(--panel-gap));
+}
+
+/* the "YouTube hidden" chip's height, for what sits above the mini player (toasts) */
+html[data-yt-hidden] {
+  --yt-chip-h: 38px;
+}

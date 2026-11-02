@@ -74,7 +74,8 @@ export function AppShell() {
   const shellStyle = {
     '--toast-offset': isDesktop
       ? 'calc(var(--playerbar-h) + 16px)'
-      : 'calc(var(--tabbar-h) + var(--miniplayer-h) + var(--safe-bottom) + 18px)',
+      : // above the docked YouTube window when it sits above the mini player
+        'max(calc(var(--tabbar-h) + var(--miniplayer-h) + var(--safe-bottom) + 18px + var(--yt-chip-h, 0px)), calc(var(--yt-res-bottom, 0px) + 10px))',
   } as CSSProperties;
 
   return (

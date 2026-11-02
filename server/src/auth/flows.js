@@ -1,8 +1,8 @@
-// Short-lived one-time records: OAuth state (+PKCE verifier), native exchange codes, link tickets.
+// Short-lived one-time records: OAuth state (+PKCE verifier), native exchange codes, link tickets, app-to-website hand-offs.
 import { createHash, randomBytes } from 'node:crypto';
 import { randomToken, sha256 } from '../crypto.js';
 
-export const FLOW_TTL = { oauth: 10 * 60 * 1000, exchange: 2 * 60 * 1000, link: 5 * 60 * 1000, linkfinish: 2 * 60 * 1000, chatgpt: 10 * 60 * 1000, notionstart: 5 * 60 * 1000, notionfinish: 2 * 60 * 1000 };
+export const FLOW_TTL = { oauth: 10 * 60 * 1000, exchange: 2 * 60 * 1000, link: 5 * 60 * 1000, linkfinish: 2 * 60 * 1000, chatgpt: 10 * 60 * 1000, notionstart: 5 * 60 * 1000, notionfinish: 2 * 60 * 1000, handoff: 2 * 60 * 1000, handoffswitch: 5 * 60 * 1000 };
 
 /** Stores a flow and returns the raw token (state / code / ticket). */
 export function putFlow(db, kind, { provider = null, userId = null, data = {} } = {}) {
@@ -23,6 +23,14 @@ export function takeFlow(db, kind, raw) {
   if (!row) return undefined;
   db.prepare('DELETE FROM auth_flows WHERE id = ?').run(id);
   if (row.kind !== kind || row.expires_at < Date.now()) return undefined;
+  return { provider: row.provider, userId: row.user_id, data: JSON.parse(row.data) };
+}
+
+/** Reads without using it up (a question page shown before the answer). Undefined when missing, expired or of another kind. */
+export function peekFlow(db, kind, raw) {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const row = db.prepare('SELECT * FROM auth_flows WHERE id = ?').get(sha256(raw));
+  if (!row || row.kind !== kind || row.expires_at < Date.now()) return undefined;
   return { provider: row.provider, userId: row.user_id, data: JSON.parse(row.data) };
 }
 

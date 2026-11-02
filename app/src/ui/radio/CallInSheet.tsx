@@ -21,9 +21,12 @@ const IDEAS = ['How is my day looking?', 'Play something upbeat next', 'Tell me 
 const NOTE_MS = 15 * 60_000;
 
 // the last card a call-in added (kept here: the sheet closes while the hosts answer)
-let lastRemembered: { text: string; at: number } | undefined;
-memoryEvents.on('change', ({ card, added }) => {
-  if (added && card && (card.source === 'callin' || card.source === 'app')) lastRemembered = { text: card.text, at: Date.now() };
+let lastRemembered: { id: string; text: string; at: number } | undefined;
+memoryEvents.on('change', ({ card, added, removed }) => {
+  if (added && card && (card.source === 'callin' || card.source === 'app')) lastRemembered = { id: card.id, text: card.text, at: Date.now() };
+  else if (card && lastRemembered && card.id === lastRemembered.id) lastRemembered = { ...lastRemembered, text: card.text };
+  // the note never names a card that is gone (deleted, tidied away, or "Forget everything": no card, empty list)
+  if (lastRemembered && removed && (removed.includes(lastRemembered.id) || (!card && !removed.length))) lastRemembered = undefined;
 });
 
 // the last thing the hosts did (or could not do) after a yes: a short note like the Remembered one
@@ -56,8 +59,8 @@ export function CallInSheet({ open, onClose, onOpen }: { open: boolean; onClose:
   useEffect(
     () =>
       memoryEvents.on('change', ({ card, added }) => {
-        if (!added || !card || card.source !== 'callin') return;
         setRemembered(lastRemembered);
+        if (!added || !card || card.source !== 'callin') return;
         // the sheet is usually closed by then: a quiet note says what was kept
         toast({ title: 'Remembered', description: card.text });
       }),

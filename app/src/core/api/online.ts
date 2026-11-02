@@ -53,6 +53,18 @@ export const isIncludedCode = (code: string | undefined): boolean => Boolean(cod
 export const isOnline = (): boolean => api.config?.edition === 'online';
 
 const PLAN_CHOSEN = 'online:planChosen';
+let handedOffAt = 0;
+
+/** The website people buy plans on, as they would type it: the server's host without "app." / "www.". */
+export function planSiteName(): string {
+  let host = '';
+  try {
+    host = new URL(api.url('/')).host;
+  } catch {
+    host = typeof location !== 'undefined' ? location.host : '';
+  }
+  return host.replace(/^(app|www)\./i, '') || 'the website';
+}
 
 export const online = {
   // ---- sign-in ----
@@ -85,6 +97,26 @@ export const online = {
     const { url } = await request<{ url: string }>('POST', '/api/billing/portal', { ...opts, app: isNative || isDesktop });
     await openExternal(url);
   },
+
+  /**
+   * The phone apps' plan link: opens the website's plan page in the system browser (Custom Tab on Android), already
+   * signed in to this account through a one-time hand-off code. A server without the hand-off opens the page signed
+   * out (sign in there). The website's "Back to the app" returns with hostcaster://plan.
+   */
+  async openWebsite(to: '/settings/plan' | '/plans' = '/settings/plan'): Promise<void> {
+    let url: string | undefined;
+    try {
+      url = (await request<{ url: string }>('POST', '/api/handoff', { to })).url;
+    } catch (err) {
+      // 404 = a server from before the hand-off; anything else is a real problem (rate limit, offline)
+      if ((err as { status?: number }).status !== 404) throw err;
+    }
+    if (!url || !/^https?:\/\//i.test(url)) url = api.url(`/#${to}`);
+    handedOffAt = Date.now();
+    await openAuthUrl(url);
+  },
+  /** When this app last sent someone to the website's plan page (0 = never): coming back re-reads the plan. */
+  handedOffAt: (): number => handedOffAt,
 
   admin: () => request<AdminSummary>('GET', '/api/admin/summary'),
 

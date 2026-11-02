@@ -153,3 +153,25 @@
     padding: var(--space-3) var(--space-6) var(--space-6);
   }
 }
+
+/* the docked YouTube window's room (phone and desktop apps, core/services/youtube/host.ts): sheets stay clear of it */
+html[data-yt-dock] .aw-sheet:not(.aw-sheet--full) {
+  bottom: var(--yt-res-bottom, 0px);
+  max-height: calc(100dvh - var(--safe-top) - 24px - var(--yt-res-top, 0px) - var(--yt-res-bottom, 0px));
+}
+
+html[data-yt-dock] .aw-sheet--full {
+  padding-top: max(var(--safe-top), var(--yt-res-top, 0px));
+  padding-bottom: max(var(--safe-bottom), var(--yt-res-bottom, 0px));
+  padding-left: var(--yt-res-left, 0px);
+  padding-right: var(--yt-res-right, 0px);
+}
+
+@media (min-width: 900px) {
+  html[data-yt-dock] .aw-sheet:not(.aw-sheet--full) {
+    bottom: auto;
+    left: calc(50% + (var(--yt-res-left, 0px) - var(--yt-res-right, 0px)) / 2);
+    width: min(var(--sheet-w, 560px), calc(100vw - 48px - var(--yt-res-left, 0px) - var(--yt-res-right, 0px)));
+    max-height: min(84vh, 860px);
+  }
+}

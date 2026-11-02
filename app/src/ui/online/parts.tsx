@@ -7,6 +7,7 @@ import type { PlanInfo, VoiceOption } from '@/core/types';
 import { navigate } from '@/state/router';
 import { usePlan } from '@/state/plan';
 import { Badge, Button, Link, cx } from '../components';
+import { PlanLinkButton, PlanLinkText, usePlanLink } from './PlanLink';
 import './online.css';
 
 export const METER_NAME: Record<MeterCategory, string> = { brain: 'Host-Caster AI', voice: 'Host-Caster Voices', premium: 'Premium voices' };
@@ -126,8 +127,10 @@ export function IncludedNotice({ kind }: { kind: 'brain' | 'voices' }) {
   const included = kind === 'brain' ? status?.includes.brain : status?.includes.voices;
   const meter = kind === 'brain' ? status?.meters.brain : status?.meters.voice;
   const premium = kind === 'voices' ? status?.meters.premium : undefined;
-  // voices on a plan without the premium ones: say what Premium adds (only when this server sells it)
-  const premiumPlan = sellsPlans && kind === 'voices' && !status?.includes.premium ? status?.plans.find((p) => p.includes.premium) : undefined;
+  const link = usePlanLink();
+  // voices on a plan without the premium ones: say what Premium adds (only when this server sells it; the phone apps
+  // name no price and link to the website)
+  const premiumPlan = (sellsPlans || link.shown) && kind === 'voices' && !status?.includes.premium ? status?.plans.find((p) => p.includes.premium) : undefined;
   return (
     <div className="aw-included" data-included={included ? 'yes' : 'no'}>
       {included ? (
@@ -151,13 +154,31 @@ export function IncludedNotice({ kind }: { kind: 'brain' | 'voices' }) {
             <p className="aw-included__line aw-included__line--off" data-premium-upsell>
               <Sparkles aria-hidden />
               <span>
-                <strong>Premium voices.</strong> 21 ElevenLabs voices come with the {premiumPlan.name} plan ({premiumPlan.price} a month).{' '}
-                <Link to="/settings/plan" className="aw-textlink">
-                  See {premiumPlan.name}
-                </Link>
+                <strong>Premium voices.</strong> 21 ElevenLabs voices come with the {premiumPlan.name} plan
+                {sellsPlans ? ` (${premiumPlan.price} a month).` : '.'}{' '}
+                {sellsPlans ? (
+                  <Link to="/settings/plan" className="aw-textlink">
+                    See {premiumPlan.name}
+                  </Link>
+                ) : (
+                  <PlanLinkText />
+                )}
               </span>
             </p>
           )}
+        </>
+      ) : !sellsPlans && link.shown ? (
+        <>
+          <p className="aw-included__line aw-included__line--off" data-store-note>
+            <Sparkles aria-hidden />
+            <span>
+              <strong>{kind === 'brain' ? 'Comes with the Brain, Everything and Premium plans.' : 'Come with the Voices, Everything and Premium plans.'}</strong>{' '}
+              {link.note}
+            </span>
+          </p>
+          <div>
+            <PlanLinkButton size="sm" />
+          </div>
         </>
       ) : !sellsPlans ? (
         <p className="aw-included__line aw-included__line--off" data-store-note>
@@ -222,14 +243,17 @@ export function UsageBanner() {
  */
 export function PremiumVoiceNote({ voice, hasPremiumVoices }: { voice?: VoiceOption; hasPremiumVoices: boolean }) {
   const status = usePlan((s) => s.status);
+  const link = usePlanLink();
   if (!status) return null;
-  const premiumPlan = sellsPlans ? status.plans.find((p) => p.includes.premium) : undefined;
+  const premiumPlan = sellsPlans || link.shown ? status.plans.find((p) => p.includes.premium) : undefined;
   const usedUp = Boolean(status.includes.premium && status.meters.premium?.state === 'reached');
-  const upgrade = premiumPlan ? (
+  const upgrade = !premiumPlan ? null : sellsPlans ? (
     <Link to="/settings/plan" className="aw-textlink" data-premium-upgrade>
       See {premiumPlan.name}
     </Link>
-  ) : null;
+  ) : (
+    <PlanLinkText />
+  );
   if (voice?.premium && (!status.includes.premium || usedUp)) {
     const standIn = voice.standIn?.name;
     return (
@@ -244,12 +268,12 @@ export function PremiumVoiceNote({ voice, hasPremiumVoices }: { voice?: VoiceOpt
           ) : status.includes.voices && standIn ? (
             <>
               <strong>{voice.name} is a Premium voice.</strong> On your {planName(status, status.plan)} plan this host speaks as {standIn}, a Host-Caster
-              voice like {voice.name}{sellsPlans ? ', until you go Premium' : ''}. {upgrade}
+              voice like {voice.name}{premiumPlan ? ', until you go Premium' : ''}. {upgrade}
             </>
           ) : (
             <>
               <strong>{voice.name} is a Premium voice.</strong>{' '}
-              {sellsPlans ? <>Premium voices come with the {premiumPlan?.name ?? 'Premium'} plan. {upgrade}</> : 'It is not included with this account.'}
+              {premiumPlan ? <>Premium voices come with the {premiumPlan.name} plan. {upgrade}</> : 'It is not included with this account.'}
             </>
           )}
         </span>
@@ -260,10 +284,18 @@ export function PremiumVoiceNote({ voice, hasPremiumVoices }: { voice?: VoiceOpt
     return (
       <p className="aw-field__hint" data-premium-hint>
         Voices marked Premium (ElevenLabs) come with the{' '}
-        <Link to="/settings/plan" className="aw-textlink">
-          {premiumPlan.name} plan
-        </Link>
-        .
+        {sellsPlans ? (
+          <>
+            <Link to="/settings/plan" className="aw-textlink">
+              {premiumPlan.name} plan
+            </Link>
+            .
+          </>
+        ) : (
+          <>
+            {premiumPlan.name} plan. <PlanLinkText />
+          </>
+        )}
       </p>
     );
   }

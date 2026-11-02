@@ -41,7 +41,7 @@ function baseHeadersHook() {
   return async (req, reply, payload) => {
     reply.header('x-content-type-options', 'nosniff');
     reply.header('x-frame-options', 'DENY');
-    reply.header('referrer-policy', 'strict-origin-when-cross-origin');
+    if (!reply.hasHeader('referrer-policy')) reply.header('referrer-policy', 'strict-origin-when-cross-origin');
     if (String(reply.getHeader('content-type') ?? '').startsWith('text/html')) {
       reply.header('content-security-policy', "frame-ancestors 'none'; object-src 'none'; base-uri 'self'");
     }

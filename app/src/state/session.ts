@@ -7,6 +7,7 @@ import { getSettings } from '@/core/db';
 import { onDeepLink, sellsPlans } from '@/core/native';
 import type { ApiSession, ServerConfig } from '@/core/types';
 import { toast } from '@/ui/components/Toast';
+import { applyIncluded } from '@/ui/online/setupIncluded';
 import { navigate, useRoute } from './router';
 import { startPlanStore, usePlan } from './plan';
 
@@ -43,6 +44,30 @@ function handleAuthReturn(session: ApiSession | undefined): void {
   const rest = Object.fromEntries(Object.entries(query).filter(([k]) => !(RETURN_KEYS as readonly string[]).includes(k)));
   const q = new URLSearchParams(rest).toString();
   navigate(`${path}${q ? `?${q}` : ''}`, { replace: true });
+}
+
+const FROM_APP = 'hostcaster:fromApp';
+
+/** This browser tab came from the app's plan link (?from=app): the website's plan pages offer "Back to the app". */
+export function openedFromApp(): boolean {
+  try {
+    return sessionStorage.getItem(FROM_APP) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Keeps ?from=app for this tab (it survives the trip through Stripe) and takes it off the address. */
+function captureFromApp(): void {
+  const { path, query } = useRoute.getState();
+  if (query.from !== 'app') return;
+  try {
+    sessionStorage.setItem(FROM_APP, '1');
+  } catch {
+    // private mode without storage: the page just does not offer the way back
+  }
+  const rest = new URLSearchParams(Object.entries(query).filter(([k]) => k !== 'from')).toString();
+  navigate(`${path}${rest ? `?${rest}` : ''}`, { replace: true });
 }
 
 /**
@@ -93,6 +118,8 @@ async function routeOnline(session: ApiSession | undefined): Promise<void> {
   const status = await usePlan.getState().refresh();
   if (stale()) return;
   if (path === '/sign-in') navigate('/', { replace: true });
+  // opened from the app's plan link: this browser goes to the plan page, not the first-run plan picker
+  if (openedFromApp()) await online.markPlanChosen();
   // the phone apps sell no plans: with the free plan on there is nothing to pick there
   const picker = sellsPlans || status?.freePlan === false;
   if (status && !status.plan && status.enabled && picker && !(await online.planChosen()) && useRoute.getState().path !== '/plans') {
@@ -114,7 +141,20 @@ const sessionReady = (): Promise<void> =>
     });
   });
 
+/** The plan changed on the website after the app's plan link: say so once and put what it includes to work. */
+function announcePlanChanges(): () => void {
+  let announced: string | null | undefined;
+  return usePlan.subscribe((s, prev) => {
+    const now = s.status?.plan;
+    if (!online.handedOffAt() || !s.status || !prev.status || !now || now === prev.status.plan || now === announced) return;
+    announced = now;
+    toast.success(`You are on ${s.status.plans.find((p) => p.id === now)?.name ?? now}`);
+    void applyIncluded({ brain: s.status.includes.brain, voices: s.status.includes.voices, premium: s.status.includes.premium });
+  });
+}
+
 export function startSessionStore(): () => void {
+  captureFromApp();
   listenForDeepLinks();
   listenForNotionLinks(sessionReady);
   startPlanStore();
@@ -133,7 +173,13 @@ export function startSessionStore(): () => void {
     onDeepLink((url) => {
       const m = /^[a-z][a-z0-9+.-]*:\/\/billing\?status=([a-z]+)/i.exec(url);
       if (m) navigate(m[1] === 'done' ? '/settings/plan?checkout=done' : '/settings/plan?portal=1');
+      // the website's "Back to the app" after the plan link: re-read the plan from Stripe and show it
+      if (/^[a-z][a-z0-9+.-]*:\/\/plan(?:[/?#]|$)/i.test(url)) {
+        if (useRoute.getState().path !== '/plans') navigate('/settings/plan?returned=1');
+        void usePlan.getState().sync();
+      }
     }),
+    announcePlanChanges(),
     // phones: Notion's consent came back while Connections was not open (Android stopped the app meanwhile and the
     // link started it again): show the result there, where the card opens the page picker
     notion.on('change', (e) => {

@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { toggleLike } from '@/core/library';
 import { player } from '@/core/player';
 import { setYouTubeMiniOpen } from '@/core/services/youtube/host';
+import { setVideoHidden } from '@/core/services/youtube/videoWindow';
 import { navigate, useRoute } from '@/state/router';
 import { runAction } from '../actions';
 import { toast } from '../components';
@@ -69,6 +70,19 @@ export function usePlayerErrors(): void {
     // phone apps: the YouTube mini window opens Now Playing; a YouTube song that waited long off screen is offered
     setYouTubeMiniOpen(() => navigate('/now-playing'));
     const offWait = player.on('state', (s) => {
+      // the listener hid the YouTube video and only YouTube songs are left: say why the music stopped
+      if (s.waiting === 'video') {
+        if (hiddenNoted === s.track?.id) return;
+        hiddenNoted = s.track?.id;
+        toast({
+          title: 'Paused while the video is hidden',
+          description: 'Only YouTube songs are left to play, and they play only with the video on screen.',
+          duration: 10_000,
+          action: { label: 'Show video', onClick: () => setVideoHidden(false) },
+        });
+        return;
+      }
+      hiddenNoted = undefined;
       if (s.waiting !== 'resume') {
         if (!s.waiting) resumeOffered = undefined;
         return;
@@ -93,3 +107,5 @@ export function usePlayerErrors(): void {
 
 /** one offer per waiting song (PlayerBar and MiniPlayer may both listen) */
 let resumeOffered: string | undefined;
+/** one hidden-video note per waiting song */
+let hiddenNoted: string | undefined;

@@ -13,6 +13,8 @@
 # SIGNING key (the one enrolled as the Play App Signing key, see release/play/SUBMIT.md) so Google Play can update
 # it later. Only the direct build shows the in-app "A new version is ready" notice (VITE_HOSTCASTER_DISTRIBUTION).
 # Publish it on the website with: node website/scripts/publish-android.mjs release/direct/<file>.apk
+# The plan link to the website (VITE_HOSTCASTER_PLAN_LINK=on|account|off) is on by default for --direct and off for
+# Play: set it for a store build once that store's rules are checked (docs/ONLINE.md, section 8).
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,7 +30,7 @@ trap 'rm -rf "$web"' EXIT
 : "${ANDROID_HOME:?set ANDROID_HOME to the Android SDK}"
 
 cd "$here"
-echo "== web build (release, $distribution)"
+echo "== web build (release, $distribution, plan link ${VITE_HOSTCASTER_PLAN_LINK:-default})"
 unset HOSTCASTER_SOURCEMAP
 VITE_HOSTCASTER_DEBUG=0 VITE_HOSTCASTER_DISTRIBUTION="$distribution" npx vite build --outDir "$web" --emptyOutDir --logLevel warn
 if grep -rlq "sourceMappingURL" "$web/assets" 2>/dev/null || ls "$web"/assets/*.map >/dev/null 2>&1; then

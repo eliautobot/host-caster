@@ -11,6 +11,7 @@ import { useRoute } from '@/state/router';
 import { runAction } from '../../actions';
 import { Button, TextField, toast } from '../../components';
 import { Meters, PlanCards, dateText, planName } from '../../online/parts';
+import { BackToApp, PlanLinkButton, usePlanLink } from '../../online/PlanLink';
 import { applyIncluded } from '../../online/setupIncluded';
 import { Actions, ConfirmSheet, Hint, SectionCard } from './account/parts';
 import './account/account.css';
@@ -26,14 +27,15 @@ function statusLine(s: Status): string {
   return `Renews on ${dateText(s.renewsAt)}`;
 }
 
-function statusDetail(s: Status): string | undefined {
+/** linked = the phone apps' plan link is there: changes are made on the website. */
+function statusDetail(s: Status, linked = false): string | undefined {
   if (s?.status === 'canceling') {
-    return `You cancelled this plan. It keeps working until ${dateText(s.renewsAt)}, then your account ${s.freePlan ? 'is free (bring your own AI and voices)' : 'has no plan'}.${sellsPlans ? ' Changed your mind? Keep my plan.' : ''}`;
+    return `You cancelled this plan. It keeps working until ${dateText(s.renewsAt)}, then your account ${s.freePlan ? 'is free (bring your own AI and voices)' : 'has no plan'}.${sellsPlans ? ' Changed your mind? Keep my plan.' : linked ? ' Changed your mind? Keep it on the website.' : ''}`;
   }
   if (s?.status === 'past_due') {
     return sellsPlans
       ? `Your last payment did not go through. The plan keeps working until ${dateText(s.graceUntil)} while we retry; update your card in Manage billing to keep it.`
-      : `Your last payment did not go through. The plan keeps working until ${dateText(s.graceUntil)} while it is retried.`;
+      : `Your last payment did not go through. The plan keeps working until ${dateText(s.graceUntil)} while it is retried.${linked ? ' Update your card on the website.' : ''}`;
   }
   return undefined;
 }
@@ -83,12 +85,16 @@ export default function Plan() {
   const status = usePlan((s) => s.status);
   const query = useRoute((s) => s.query);
   const [busy, setBusy] = useState<string>();
+  const link = usePlanLink();
+  // the website, back from Stripe: "Back to the app" becomes the main button
+  const [changed, setChanged] = useState(false);
 
   useEffect(() => {
     if (query.checkout === 'done' || query.portal) {
       void (async () => {
         const before = usePlan.getState().status?.plan;
         const s = query.checkout === 'done' ? await waitForPlan() : await usePlan.getState().sync();
+        setChanged(true);
         if (s?.plan && s.plan !== before) {
           toast.success(`You are on ${planName(s, s.plan)}`);
           await applyIncluded({ brain: s.includes.brain, voices: s.includes.voices, premium: s.includes.premium });
@@ -96,7 +102,8 @@ export default function Plan() {
         // drop ?checkout / ?portal, unless the user already went somewhere else while Stripe was read back
         if (useRoute.getState().path === '/settings/plan') navigate('/settings/plan', { replace: true });
       })();
-    } else {
+    } else if (!query.returned) {
+      // (back from the website through the app's plan link: the deep link is already re-reading it from Stripe)
       void usePlan.getState().refresh();
     }
     if (query.checkout === 'cancelled') toast({ title: 'Checkout cancelled', description: 'Nothing was charged.' });
@@ -124,6 +131,7 @@ export default function Plan() {
 
   return (
     <div className="aw-acct-stack" data-plan-page>
+      <BackToApp changed={changed} />
       <SectionCard
         icon={CreditCard}
         tone={status?.plan ? 'signal' : 'neutral'}
@@ -139,12 +147,22 @@ export default function Plan() {
             : undefined
         }
       >
-        {statusDetail(status) && (
+        {statusDetail(status, link.shown) && (
           <p className="aw-acct-desc" data-plan-detail>
-            {statusDetail(status)}
+            {statusDetail(status, link.shown)}
           </p>
         )}
-        {!sellsPlans ? (
+        {!sellsPlans && link.shown ? (
+          // the phone apps: plans are bought and changed on the website (signed in through the hand-off)
+          <>
+            <p className="aw-acct-desc" data-store-note>
+              {link.note}
+            </p>
+            <Actions>
+              <PlanLinkButton />
+            </Actions>
+          </>
+        ) : !sellsPlans ? (
           <p className="aw-acct-desc" data-store-note>
             {status?.plan ? 'Plan changes are not available in this app.' : 'Bring your own AI and voices: your keys, or models on your own computer.'}
           </p>

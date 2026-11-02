@@ -10,6 +10,7 @@ import { accountNews, deviceHints, stationFeeds } from './news';
 import { feedsReachable, getCalendar, getEmail, getInbox, getNews } from './sources';
 import { getNotionNotes } from './notion';
 import { getWeather } from './weather';
+import { videoHidden } from '../services/youtube/videoWindow';
 
 /**
  * Breaks the planner remembers: enough for its item cooldowns (a headline rests 12 hours, a mail 6) to hold over a
@@ -96,5 +97,6 @@ export async function buildContext(station: Station, songs: ContextSongs = {}, o
     inbox: inbox?.some((i) => i.kind !== 'song_request') ? inbox.filter((i) => i.kind !== 'song_request') : undefined,
     recentBreaks,
     ...(headsUps.length ? { headsUps } : {}),
+    ...(videoHidden() ? { youtubeHidden: true } : {}),
   };
 }

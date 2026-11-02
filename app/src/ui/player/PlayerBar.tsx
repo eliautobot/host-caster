@@ -10,6 +10,7 @@ import { OnAirStrip } from '../radio/OnAirStrip';
 import { Scrubber, Transport, VolumeControl } from './controls';
 import { usePlayerErrors, usePlayerShortcuts } from './hooks';
 import { usePlayerView } from './usePlayerView';
+import { YouTubeHiddenChip } from './YouTubeHiddenChip';
 import './player.css';
 
 export function PlayerBar() {
@@ -71,6 +72,7 @@ export function PlayerBar() {
 
       <div className="aw-playerbar__side">
         <OnAirStrip variant="bar" className="aw-playerbar__onair" />
+        <YouTubeHiddenChip variant="bar" />
         <IconButton
           icon={ListMusic}
           label="Queue (Q)"

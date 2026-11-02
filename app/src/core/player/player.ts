@@ -29,6 +29,8 @@ const MAX_FAILED_STARTS = 4;
 export const SCREEN_RESUME_MS = 10 * 60_000;
 /** the notification's second line while a song waits for the app to be on screen */
 const SCREEN_NOTE = 'Waiting: YouTube plays while Host-Caster is open';
+/** ... and while it waits for the listener to show the hidden video again */
+const VIDEO_NOTE = 'Waiting: YouTube plays when you show the video';
 
 export interface PlayerOptions {
   /** null = no Web Audio (tests) */
@@ -90,7 +92,9 @@ export class Player {
   /** songs that may play only while the app is on screen (phone apps: YouTube), see setScreenOnly */
   private screenOnly?: (track: Track) => boolean;
   private offScreen = false;
-  /** the song that waits because the app left the screen, and since when */
+  /** the listener closed the video window: songs that may play only on screen are skipped until it shows again */
+  private videoHidden = false;
+  /** the song that waits because the app left the screen (or the video is hidden), and since when */
   private heldOffScreen?: { id: string; at: number };
 
   constructor(opts: PlayerOptions = {}) {
@@ -340,14 +344,52 @@ export class Player {
   /** The app came on screen (true) or left it (home button, screen off, another app on top). */
   setOnScreen(on: boolean): void {
     if (this.offScreen === !on) return;
+    const was = this.blocked;
     this.offScreen = !on;
+    this.screenChanged(was, false);
+  }
+
+  /**
+   * The listener closed the video window (true) or showed it again (false). A song that may play only on screen
+   * cannot play hidden, so it stops and the next song that may play goes on (nothing left: it waits, paused, with
+   * waiting 'video'); the songs after it wait behind the others, as off screen. Shown again: a waiting song plays.
+   */
+  setVideoHidden(hidden: boolean): void {
+    if (this.videoHidden === hidden) return;
+    const was = this.blocked;
+    this.videoHidden = hidden;
+    this.screenChanged(was, true);
+  }
+
+  get onScreen(): boolean {
+    return !this.offScreen;
+  }
+
+  get isVideoHidden(): boolean {
+    return this.videoHidden;
+  }
+
+  /** songs that may play only on screen cannot play now */
+  private get blocked(): boolean {
+    return this.offScreen || this.videoHidden;
+  }
+
+  /** `byListener`: the video was hidden or shown (else the app left the screen or came back) */
+  private screenChanged(was: boolean, byListener: boolean) {
     if (!this.screenOnly) return;
     const s = this._state;
     const track = s.track;
-    if (!on) {
+    if (this.blocked) {
       this.deferScreenOnly(this.q.index + 1);
       // a break between two songs talks on; the next start checks again
-      if (track && this.mustWait(track) && (s.status === 'playing' || s.status === 'loading') && !this.holds.between) this.waitOffScreen(track);
+      if (track && this.mustWait(track) && (s.status === 'playing' || s.status === 'loading') && !this.holds.between) {
+        if (byListener) this.skipHidden(track);
+        else this.waitOffScreen(track);
+      } else if (was && (s.waiting === 'screen' || s.waiting === 'video') && s.waiting !== this.waitReason()) {
+        // still blocked for another reason (back on screen, the video still hidden): the note follows
+        this.set({ waiting: this.waitReason() });
+        this.notify(false);
+      }
       return;
     }
     const held = this.heldOffScreen;
@@ -356,7 +398,8 @@ export class Player {
       if (s.waiting) this.set({ waiting: undefined });
       return;
     }
-    if (Date.now() - held.at <= SCREEN_RESUME_MS) {
+    // the listener showed the video: play now; back on screen: play on unless the app was away a long time
+    if (byListener || Date.now() - held.at <= SCREEN_RESUME_MS) {
       void this.play();
       return;
     }
@@ -364,8 +407,15 @@ export class Player {
     this.notify(false);
   }
 
-  get onScreen(): boolean {
-    return !this.offScreen;
+  private waitReason(): 'screen' | 'video' {
+    return this.videoHidden ? 'video' : 'screen';
+  }
+
+  /** The video was hidden while its song played: the next song that may play goes on (none: this one waits). */
+  private skipHidden(track: Track) {
+    if (this.playableAfter(this.q.index) < 0) return this.waitOffScreen(track);
+    // startTrack moves the next song that may play in front of this one, which waits right behind it
+    void this.startTrack(this.q.index, { autoplay: true, auto: true });
   }
 
   // ------------------------------------------------------------------------------------------------ modes & queue
@@ -504,7 +554,7 @@ export class Player {
       live: Boolean(s.live),
       canPrev: n > 0,
       canNext: Q.nextIndex(n, this.q.index, this.repeat, false) >= 0 || this.holds.pending,
-      ...(s.waiting === 'screen' ? { note: SCREEN_NOTE } : {}),
+      ...(s.waiting === 'screen' ? { note: SCREEN_NOTE } : s.waiting === 'video' ? { note: VIDEO_NOTE } : {}),
       ...extra,
     });
   }
@@ -811,7 +861,7 @@ export class Player {
 
   /** this song may not play right now (off screen, and it may play only on screen) */
   private mustWait(track: Track): boolean {
-    return this.offScreen && Boolean(this.screenOnly?.(track));
+    return this.blocked && Boolean(this.screenOnly?.(track));
   }
 
   /** the first song after `index` that may play now, or -1 */
@@ -845,7 +895,7 @@ export class Player {
 
   private holdForScreen(track: Track) {
     this.heldOffScreen = { id: track.id, at: Date.now() };
-    this.set({ waiting: 'screen' });
+    this.set({ waiting: this.waitReason() });
     this.notify(false);
   }
 
