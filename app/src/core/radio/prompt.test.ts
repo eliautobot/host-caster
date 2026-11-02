@@ -58,12 +58,17 @@ describe('prompt builder', () => {
     expect(p.user).toContain(`Write line 2 of ${pl.lines}`);
   });
 
-  it('says the time in words and forbids made-up plans when FACTS has none', () => {
+  it('never gives the clock time (the time-teller writes {TIME}) and forbids made-up plans when FACTS has none', () => {
     const p = packet({ reminders: [], calendar: [], lifeEvents: [], news: [], notes: [], email: [] });
     const seg = { ...station().segments, calendar: false, reminders: false, email: false, notes: false, lifeEvents: false };
     const pl = planBreak(station({ segments: seg }), p, settled(), { now: NOW, rand: () => 0 });
     const prompt = buildScriptPrompt(station({ segments: seg }), hosts(2), pl, p);
-    expect(prompt.user).toMatch(/SAY THE TIME AS: "[a-z' -]+"/);
+    // the brain never sees the clock: the time goes in on air, so it is right when it is said
+    expect(prompt.user).not.toMatch(/SAY THE TIME AS|\d{1,2}:\d{2}/);
+    const timed = { ...pl, items: [...pl.items.filter((i) => i.segment !== 'time'), { segment: 'time' as const, key: 'time' }] };
+    const tp = buildScriptPrompt(station({ segments: seg }), hosts(2), timed, p);
+    expect(tp.user).toMatch(/TIME CHECK: the LAST line .*\{TIME\}/);
+    expect(tp.system).toMatch(/only the last line says it, written exactly as \{TIME\}/);
     expect(prompt.system).toMatch(/do not mention reminders, appointments, plans/);
     expect(prompt.system).not.toMatch(/tell the listener about them/);
     // with a reminder in the plan, the hosts may bring it up

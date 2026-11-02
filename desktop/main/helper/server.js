@@ -5,6 +5,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
+import { readMessages as wireMessages, readTools } from '../../../server/src/ai/wire.js';
 import { createSealer } from '../../../server/src/crypto.js';
 import { MANAGE_USAGE_URL } from '../../../server/src/chatgpt/errors.js';
 import { createChatGPT } from '../../../server/src/chatgpt/service.js';
@@ -58,12 +59,10 @@ async function readJson(req) {
   }
 }
 
+/** Plain turns and tool turns (the hosts' lookups), the same shapes the server takes (server/src/ai/wire.js). */
 function readMessages(body) {
-  const list = Array.isArray(body?.messages) ? body.messages : [];
-  return list
-    .filter((m) => m && typeof m.content === 'string' && ['user', 'assistant', 'system'].includes(m.role))
-    .slice(-40)
-    .map((m) => ({ role: m.role, content: m.content.slice(0, 40_000) }));
+  const list = (Array.isArray(body?.messages) ? body.messages : []).slice(-40).map((m) => (m && typeof m.content === 'string' ? { ...m, content: m.content.slice(0, 40_000) } : m));
+  return wireMessages({ messages: list });
 }
 
 /** The address the ChatGPT tab ended on, pasted when the callback could not reach this PC's listener. */
@@ -146,6 +145,7 @@ export async function startHelper(opts) {
         model: String(brain.model),
         system: String(body.system ?? ''),
         messages: readMessages(body),
+        tools: readTools(body),
         json: body.json === true,
         force: body.force === true,
       });

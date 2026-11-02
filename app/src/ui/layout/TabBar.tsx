@@ -3,12 +3,14 @@ import { Avatar, Link, cx } from '../components';
 import { NAV_ITEMS, type NavKey } from './nav';
 
 /** Phone bottom tabs. Settings shows the listener's avatar. */
-export function TabBar({ active }: { active?: NavKey }) {
+export function TabBar({ active: navKey }: { active?: NavKey }) {
+  // Your list is reached from Home on phones
+  const active = NAV_ITEMS.find((n) => n.key === navKey)?.phone === false ? 'home' : navKey;
   const profile = useProfile((s) => s.profile);
   const name = profile.callMe || profile.name || 'You';
   return (
     <nav className="aw-tabbar" aria-label="Main">
-      {NAV_ITEMS.map(({ key, label, path, icon: Icon }) => (
+      {NAV_ITEMS.filter((n) => n.phone !== false).map(({ key, label, path, icon: Icon }) => (
         <Link
           key={key}
           to={path}

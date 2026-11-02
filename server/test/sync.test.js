@@ -115,3 +115,28 @@ test('sync: hosts on the built-in brain get none (scripted fallback), on push an
   assert.equal(withoutBuiltinBrain(clean), clean, 'a clean doc is returned as is');
   assert.ok(app.db.prepare('SELECT 1 FROM migrations WHERE id = 5').get(), 'migration 5 recorded');
 });
+
+test('sync: memory cards are sealed at rest, opened for the owner, kept when an older app pushes without them', async (t) => {
+  const { app } = await makeApp(t);
+  const { call, user } = await localUser(app);
+  const card = { id: 'm_1', text: 'Your sister Ana visits the weekend of November 7', kind: 'plans', source: 'callin', learnedAt: 1, createdAt: 1, updatedAt: 1 };
+  assert.equal((await call('PUT', '/api/sync', { rev: 0, doc: doc({ memories: [card] }) })).statusCode, 200);
+  const raw = app.db.prepare('SELECT json FROM sync_docs WHERE user_id = ?').get(user.id).json;
+  assert.ok(!raw.includes('Ana'), 'no card text in the stored row');
+  assert.match(JSON.parse(raw).memoriesSealed, /^v1\./);
+  const got = (await call('GET', '/api/sync')).json();
+  assert.deepEqual(got.doc.memories, [card]);
+  assert.equal(got.doc.memoriesSealed, undefined);
+  // an older app knows nothing of memories: its push keeps them
+  assert.equal((await call('PUT', '/api/sync', { rev: 1, doc: doc() })).statusCode, 200);
+  assert.equal((await call('GET', '/api/sync')).json().doc.memories[0].id, 'm_1');
+  // forgetting everything: an empty list is stored as nothing
+  assert.equal((await call('PUT', '/api/sync', { rev: 2, doc: doc({ memories: [] }) })).statusCode, 200);
+  assert.equal(JSON.parse(app.db.prepare('SELECT json FROM sync_docs WHERE user_id = ?').get(user.id).json).memoriesSealed, undefined);
+  assert.deepEqual((await call('GET', '/api/sync')).json().doc.memories, []);
+  // another user cannot open them (bound to the user) and a client cannot plant a sealed blob
+  const bad = await call('PUT', '/api/sync', { rev: 3, doc: doc({ memories: [{ id: 'x', text: 'y'.repeat(500) }] }) });
+  assert.equal(bad.statusCode, 400);
+  assert.equal((await call('PUT', '/api/sync', { rev: 3, doc: { ...doc(), memoriesSealed: 'v1.a.b.c' } })).statusCode, 200);
+  assert.deepEqual((await call('GET', '/api/sync')).json().doc.memories, []);
+});

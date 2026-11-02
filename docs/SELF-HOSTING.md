@@ -6,6 +6,8 @@ server adds:
 - **Accounts and sync**: hosts, stations, brains, voices, your profile and settings on every device you sign in on.
 - **Your keys in one safe place**: AI and voice keys are stored encrypted on the server and used from there.
 - **Calendar and email for the hosts**: Google Calendar, Gmail, YouTube playlists, any IMAP mailbox.
+- **Hosts that look things up**: event details, related mail, Notion pages, linked pages and, if you set one up, web
+  search (section 3).
 - **Feeds without CORS trouble**: ICS calendars and RSS news fetched by the server.
 - **A server music library**: a folder of music on the server, streamed to every device.
 - **AI apps**: ChatGPT, Claude, Grok and other assistants can send notes and segments to your hosts (MCP).
@@ -24,7 +26,7 @@ YouTube with your own Google sign-in: [YOUTUBE.md](YOUTUBE.md). Your ChatGPT pla
 2. [Without Docker](#2-without-docker)
 3. [Settings](#3-settings)
 4. [HTTPS in front](#4-https-in-front)
-5. [Google sign-in (calendar, Gmail, YouTube)](#5-google-sign-in)
+5. [Google sign-in (calendar, Gmail, Tasks, YouTube)](#5-google-sign-in)
 6. [X sign-in](#6-x-sign-in)
 7. [Email and password accounts](#7-email-and-password-accounts)
 8. [Phone apps and your server](#8-phone-apps-and-your-server)
@@ -115,6 +117,14 @@ All settings are environment variables (or lines in `.env`). Only `PUBLIC_URL` m
 | `CHATGPT_PLAN` | `true` | "Use your ChatGPT plan" brains: each person signs in with their own ChatGPT account, nothing to register. `false` turns it off. A paid or public hosted service needs OpenAI's approval first ([PROVIDERS.md](PROVIDERS.md#subscriptions)). |
 | `CHATGPT_CALLBACK_PORT` | `1455` | The port in ChatGPT's sign-in answer address `http://127.0.0.1:<port>/auth/callback` (OpenAI requires `127.0.0.1`). The server listens there while a sign-in is open, so a browser on this same computer finishes by itself; everywhere else people paste the address. Busy port: a free one is used. |
 | `CHATGPT_CALLBACK_BIND` | `127.0.0.1` | Where that listener binds. Docker on your own computer: `0.0.0.0`, and publish `127.0.0.1:1455:1455`. |
+| `SEARXNG_URL` | empty | Your [SearXNG](https://docs.searxng.org) address, for the hosts' web search. Its JSON format must be on (below). |
+| `BRAVE_SEARCH_API_KEY` | empty | A [Brave Search API](https://brave.com/search/api/) key, for the hosts' web search. |
+| `TAVILY_API_KEY` | empty | A [Tavily](https://tavily.com) key, for the hosts' web search. |
+| `WEB_SEARCH_PROVIDER` | the first one set | `searxng`, `brave`, `tavily` or `off`. Picks one when several are set; `off` turns web search off. None set = the hosts are not offered web search. |
+| `AGENT_LOOKUPS_PER_DAY` | `400` | Lookups the hosts may make per account in 24 hours (calendar, mail, Notion, linked pages, web search). |
+| `AGENT_WEB_SEARCHES_PER_DAY` | `40` | Web searches per account in 24 hours (part of the lookups above). `0` turns web search off. |
+| `ACTIONS_PER_DAY` | `50` | Things the hosts may do in a person's Google account (after their yes) per 24 hours. Past it: `429 actions_limit`. |
+| `ACTION_PROPOSALS_PER_DAY` | `200` | Suggestions the hosts may make per account in 24 hours. Past it: `429 proposals_limit`. |
 | `SPOTIFY_CLIENT_ID` | empty | A Spotify app id offered to the apps (PKCE, no secret), so people skip that step. See [PROVIDERS.md](PROVIDERS.md#7-spotify-step-by-step). |
 | `APP_SCHEME` | `hostcaster` | Deep link scheme of the phone apps. |
 | `APP_DIST` | `../app/dist` | Where the built web app is. |
@@ -122,6 +132,27 @@ All settings are environment variables (or lines in `.env`). Only `PUBLIC_URL` m
 | `HOSTCASTER_BIND`, `HOSTCASTER_PORT` | `127.0.0.1`, `8660` | Docker Compose only: the address and port published on the host. |
 
 Check what the server thinks it has: `curl http://localhost:8660/api/config`.
+
+### Hosts looking things up
+
+Hosts with an AI brain can look things up: the details of an event, related mail, the Notion pages people picked, a
+page linked from their day and, when you set it up, the web. Everything except web search works with no settings,
+from what each person connected. People see every lookup, and can turn it off, in Settings, What your hosts can see.
+
+Web search needs one of the three providers above. Only the search words are sent to it. With SearXNG, turn on its
+JSON output in its `settings.yml`, or every search answers an error:
+
+```yaml
+search:
+  formats:
+    - html
+    - json
+```
+
+`SEARXNG_URL` is an address you set, so it may be on this machine or your network (it is not held to
+`ALLOW_PRIVATE_FETCH`). In Docker, `127.0.0.1` is the Host-Caster container itself: use the machine's LAN address,
+or run SearXNG as another service in the same Compose file and use its service name (`http://searxng:8080`). Signed-in people then see a **Search the web** switch under **Hosts can look things up**. Linked
+pages are fetched like feeds: private addresses only with `ALLOW_PRIVATE_FETCH` or `FETCH_ALLOW`.
 
 ## 4. HTTPS in front
 
@@ -164,17 +195,23 @@ domain.
 ## 5. Google sign-in
 
 Google sign-in also gives the hosts your calendar and unread mail, and the music pages your YouTube playlists. Each
-of these is asked for separately, only when someone switches it on (Settings, Connections), and always read-only.
+of these is asked for separately, only when someone switches it on (Settings, Connections), and read-only. The two
+write permissions (add events and answer invitations, use Google Tasks) are asked for only when someone turns on
+**Hosts can add to my calendar** or **Hosts can use my Google Tasks** (Settings, Connections, Google), and the hosts
+use them only after that person says yes ([PRIVACY.md](PRIVACY.md#12-your-list-and-things-your-hosts-can-do)).
 
 1. Open [console.cloud.google.com](https://console.cloud.google.com), create a project (for example "Host-Caster").
-2. **APIs and services, Library**: enable **Google Calendar API**, **Gmail API** and **YouTube Data API v3**
-   (only the ones you want).
+2. **APIs and services, Library**: enable **Google Calendar API**, **Gmail API**, **Google Tasks API** and
+   **YouTube Data API v3** (only the ones you want).
 3. **Google Auth Platform** (OAuth consent screen): app name, support email, audience **External**.
 4. **Data access**: add the scopes `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`, and the ones
-   you use: `.../auth/calendar.readonly`, `.../auth/gmail.readonly`, `.../auth/youtube.readonly`.
+   you use: `.../auth/calendar.readonly`, `.../auth/gmail.readonly`, `.../auth/youtube.readonly`, and for the
+   hosts' actions `https://www.googleapis.com/auth/calendar.events` and `https://www.googleapis.com/auth/tasks`.
 5. **Audience**: while the app is in **Testing**, add every Google account that will sign in as a **test user**
    (up to 100). Testing is fine for a family server; Google shows an "unverified app" notice that people click
    through. Publishing to everyone needs Google's verification, and the Gmail scope needs a security assessment.
+   Adding the two action scopes later does not touch anyone already signed in: they keep read-only access until
+   they turn a switch on, and Google then asks them for just that permission (test users only, while in Testing).
 6. **Clients, Create client**: type **Web application**.
    - Authorized JavaScript origin: your `PUBLIC_URL` (for example `https://radio.example.com`).
    - Authorized redirect URI: `PUBLIC_URL` + `/auth/google/callback`.
@@ -298,6 +335,7 @@ blocks, and Undo moves only the block they added to Notion's trash. Disconnect r
 | --- | --- |
 | Google says `redirect_uri_mismatch` | The redirect URI in the Google client must be exactly `PUBLIC_URL/auth/google/callback` (scheme, host, port). |
 | Google says "Access blocked: app has not completed verification" | Add the account as a test user (section 5, step 5). |
+| Google Tasks never show up in Your list, or "Hosts can add to my calendar" keeps asking to reconnect | Enable the **Google Tasks API** / **Google Calendar API** (section 5, step 2) and add the two action scopes on the Data access page (step 4). |
 | X shows "Something went wrong" | Callback URI must match `PUBLIC_URL/auth/x/callback`; use the OAuth 2.0 client id, not the API key. |
 | Signed in, but every page says signed out | `PUBLIC_URL` is https while you open it over http (or the other way); open the `PUBLIC_URL` address. |
 | A feed or local AI says "blocked address" | It is on a private network; allow it with `FETCH_ALLOW` (section 12). |

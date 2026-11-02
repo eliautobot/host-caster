@@ -98,3 +98,23 @@ describe('joinLines', () => {
     expect(joinLines('That was great.', 'Mm. Next up.')).toBe('That was great. Mm. Next up.');
   });
 });
+
+describe('scripted fallback: heads-ups and the time-teller', () => {
+  it('a heads-up opens the break; the time check is in the last line with the {TIME} slot', async () => {
+    const { planAirTime } = await import('./airtime');
+    const h = { id: 'cancelled:q4', kind: 'cancelled' as const, title: 'Q4 budget review', fact: '"Q4 budget review" at 2 PM was cancelled.', why: 'Cancelled', major: false, at: NOW, state: 'pending' as const, start: NOW + 3_600_000 };
+    const p = packet({ headsUps: [h] });
+    const s = station();
+    let plan = planBreak(s, p, p.recentBreaks, { now: NOW, rand: seeded(3), hostCount: 2 });
+    if (!plan.items.some((i) => i.segment === 'time')) plan = { ...plan, items: [...plan.items, { segment: 'time', key: 'time' }] };
+    expect(plan.items[0]).toEqual({ segment: 'headsUp', key: 'headsup:cancelled:q4' });
+    const lines = writeBuiltinBreak(s, lineup, plan, p, { rand: seeded(9), now: NOW });
+    expect(lines[0]!.text).toMatch(/^Quick heads-up: Q4 budget review at \d{1,2}(:\d\d)? [AP]M was just cancelled\./);
+    expect(lines.at(-1)!.text).toContain('{TIME}');
+    expect(lines.slice(0, -1).some((l) => l.text.includes('{TIME}'))).toBe(false);
+    // ready for air: one time line, the last, voiced ahead without the time
+    const timed = planAirTime(lines, { wantTime: true, next: p.songAfter, airAt: NOW, packet: p, stationName: s.name });
+    expect(timed.timeLine?.index).toBe(timed.lines.length - 1);
+    expect(timed.voiced.at(-1)!.text).not.toContain('{TIME}');
+  });
+});

@@ -95,7 +95,7 @@ export function ImapSection() {
         <>
           <Toggle
             label="Hosts mention new mail"
-            description="Unread mail in the inbox: who wrote and the subject. Flagged mail first."
+            description="Unread mail in the inbox, flagged mail first. Hosts say who wrote and what it is about, and read a message when it matters or when you ask on a call-in."
             checked={enabled}
             onChange={(on) =>
               void update({ connections: { ...connections, email: { gmail: connections.email?.gmail ?? false, imap: on } } }).then(() => (on ? emailOnForStations() : undefined))

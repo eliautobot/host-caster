@@ -3,7 +3,7 @@
 // as tombstones ('<collection>:<id>' -> deletedAt) and lose to an edit made after them.
 import type { SyncDoc } from '../types';
 
-export const COLLECTIONS = ['hosts', 'stations', 'brains', 'voices', 'playlists'] as const;
+export const COLLECTIONS = ['hosts', 'stations', 'brains', 'voices', 'playlists', 'memories', 'tracker'] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 interface Rec {
@@ -30,12 +30,12 @@ const at = (r: Rec | undefined) => r?.updatedAt ?? 0;
 const isUneditedSeed = (r: Rec) => r.id.startsWith('seed-') && (r.updatedAt ?? 0) <= (r.createdAt ?? 0) + 1000;
 
 export function emptyDoc(): SyncDoc {
-  return { hosts: [], stations: [], brains: [], voices: [], playlists: [], deleted: {} };
+  return { hosts: [], stations: [], brains: [], voices: [], playlists: [], memories: [], tracker: [], deleted: {} };
 }
 
 export function stampsOf(doc: SyncDoc): SyncBase['stamps'] {
   const out = {} as SyncBase['stamps'];
-  for (const c of COLLECTIONS) out[c] = Object.fromEntries((doc[c] as Rec[]).map((r) => [r.id, at(r)]));
+  for (const c of COLLECTIONS) out[c] = Object.fromEntries(((doc[c] ?? []) as Rec[]).map((r) => [r.id, at(r)]));
   return out;
 }
 
@@ -162,7 +162,7 @@ export function stableStringify(value: unknown): string {
 /** Collections sorted by id so the hash does not depend on read order. */
 export function canonical(doc: SyncDoc): SyncDoc {
   const out = { ...doc };
-  for (const c of COLLECTIONS) (out[c] as Rec[]) = [...(doc[c] as Rec[])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const c of COLLECTIONS) (out[c] as Rec[]) = [...((doc[c] ?? []) as Rec[])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return out;
 }
 

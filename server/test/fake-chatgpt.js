@@ -226,6 +226,16 @@ export async function startFakeChatGPT(opts = {}) {
       if (fail === 'not-eligible') return json(res, 403, { error: { code: 'subscription_sharing_user_not_eligible', message: 'no' } });
       if (fail === 'unavailable') return json(res, 503, { detail: 'Direct routing is unavailable' });
       if (fail === 'invalid-user') return json(res, 401, { error: { code: 'subscription_sharing_invalid_user', message: 'invalid' } });
+      // function tools (the hosts' lookups): a call first, then an answer that quotes the result
+      if (Array.isArray(body.tools) && body.tools.length) {
+        const rid = id('resp');
+        const done = body.input.find((m) => m.type === 'function_call_output');
+        if (!done) {
+          const call = { type: 'function_call', id: id('fc'), call_id: 'call_1', name: body.tools[0].name, arguments: '{"query":"q4"}' };
+          return sse(res, [{ type: 'response.created', response: { id: rid, status: 'in_progress', model: body.model } }, { type: 'response.completed', response: { id: rid, status: 'completed', model: body.model, output: [call] } }]);
+        }
+        return sse(res, [{ type: 'response.output_text.delta', delta: `found ${done.output}` }, { type: 'response.completed', response: { id: rid, status: 'completed', model: body.model } }]);
+      }
       const text = (state.reply ?? defaultReply)(body);
       const half = Math.ceil(text.length / 2);
       const rid = id('resp');

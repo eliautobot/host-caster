@@ -5,12 +5,14 @@ export class HttpError extends Error {
    * @param {number} status
    * @param {string} code machine-readable, snake_case
    * @param {string} [message]
+   * @param {Record<string, unknown>} [extra] more fields for the error body (e.g. { field } or { service })
    */
-  constructor(status, code, message = code) {
+  constructor(status, code, message = code, extra) {
     super(message);
     this.name = 'HttpError';
     this.statusCode = status;
     this.code = code;
+    if (extra) this.extra = extra;
   }
 }
 
@@ -23,5 +25,7 @@ export function errorHandler(err, req, reply) {
   else if (status >= 500) req.log.error(err);
   const code = err instanceof HttpError ? err.code : err.validation ? 'invalid_request' : status >= 500 ? 'internal' : (err.code ?? 'error');
   const message = status >= 500 && !(err instanceof HttpError) ? 'Something went wrong' : err.message;
-  reply.status(status).send(errorBody(String(code).toLowerCase(), message));
+  const body = errorBody(String(code).toLowerCase(), message);
+  if (err instanceof HttpError && err.extra) Object.assign(body.error, err.extra, { code: body.error.code, message: body.error.message });
+  reply.status(status).send(body);
 }

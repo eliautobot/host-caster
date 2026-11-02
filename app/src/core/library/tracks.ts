@@ -4,6 +4,7 @@ import { player } from '../player';
 import { releaseArtworkUrl } from '../services/artwork';
 import { releaseTrackUrl } from '../services/resolve';
 import type { Track } from '../types';
+import { noteLiked } from '../memory/journal';
 
 export async function setLiked(track: Track, liked: boolean): Promise<Track> {
   const next: Track = { ...track, liked: liked || undefined, updatedAt: Date.now() };
@@ -11,6 +12,7 @@ export async function setLiked(track: Track, liked: boolean): Promise<Track> {
   // songs not in the library yet (a server song played from a list) are saved when liked
   await db.tracks.put(exists ? { ...exists, liked: next.liked, updatedAt: next.updatedAt } : next);
   player.updateTracks([exists ? { ...exists, liked: next.liked } : next]);
+  if (liked) void noteLiked(track);
   return next;
 }
 

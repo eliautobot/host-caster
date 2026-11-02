@@ -5,6 +5,7 @@ import type { ContextPacket, Station, Track, TrackSummary } from '../types';
 import { partOfDay } from '../util/time';
 import { within } from './cache';
 import { activeNotes, dueLifeEvents, dueReminders } from './life';
+import { pendingHeadsUps } from '../agent/headsup';
 import { accountNews, deviceHints, stationFeeds } from './news';
 import { feedsReachable, getCalendar, getEmail, getInbox, getNews } from './sources';
 import { getNotionNotes } from './notion';
@@ -64,6 +65,8 @@ export async function buildContext(station: Station, songs: ContextSongs = {}, o
   const lifeEvents = seg.lifeEvents ? dueLifeEvents(profile.lifeEvents, nowMs).map((i) => i.event) : [];
   const notes = seg.notes ? [...activeNotes(profile.notes, nowMs), ...((await notionNotes) ?? [])] : [];
   const reminders = seg.reminders ? dueReminders(profile.reminders, nowMs) : [];
+  // something important that just changed (calendar or mail) and was not told yet: it opens the break
+  const headsUps = (await pendingHeadsUps().catch(() => [])).filter((h) => (h.mailId ? seg.email : seg.calendar));
 
   return {
     now: {
@@ -92,5 +95,6 @@ export async function buildContext(station: Station, songs: ContextSongs = {}, o
     // song requests are queued by the radio itself (core/radio/requests), not talked about as notes
     inbox: inbox?.some((i) => i.kind !== 'song_request') ? inbox.filter((i) => i.kind !== 'song_request') : undefined,
     recentBreaks,
+    ...(headsUps.length ? { headsUps } : {}),
   };
 }

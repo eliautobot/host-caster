@@ -11,6 +11,7 @@ import { useIsDesktop } from '../../../hooks/useMediaQuery';
 import { GoogleMark } from '../account/marks';
 import { Actions, Hint, SectionCard, errorText } from '../account/parts';
 import { emailOnForStations } from './emailOn';
+import { GoogleActions } from './GoogleActions';
 
 interface Service {
   id: GoogleService;
@@ -27,7 +28,8 @@ const SERVICES: Service[] = [
     id: 'calendar',
     icon: CalendarDays,
     label: 'Google Calendar',
-    description: 'What is coming up today and tomorrow, from every calendar you see in Google Calendar.',
+    description:
+      'What is coming up, from every calendar you see in Google Calendar, with the details (who is invited, the video call, what to prepare). Holiday and other calendars you only subscribe to are mentioned, never turned into to-dos.',
     get: (c) => c.calendar?.google,
     set: (c, on) => ({ ...c, calendar: { icsUrls: c.calendar?.icsUrls ?? [], google: on } }),
     check: async () => {
@@ -39,7 +41,8 @@ const SERVICES: Service[] = [
     id: 'gmail',
     icon: Mail,
     label: 'Gmail',
-    description: 'Unread mail, important first. Hosts mention who wrote and the subject, never the whole message.',
+    description:
+      'Unread mail, important first. Hosts say who wrote and what it is about, and read a message when it matters or when you ask on a call-in. Links and addresses are never read out, and mail never makes them do anything.',
     get: (c) => c.email?.gmail,
     set: (c, on) => ({ ...c, email: { imap: c.email?.imap ?? false, gmail: on } }),
     check: async () => {
@@ -149,6 +152,7 @@ export function GoogleSection() {
               );
             })}
           </div>
+          {identity && <GoogleActions scopes={identity.scopes ?? []} />}
           {!identity && (
             <Actions>
               <Button className="aw-signin__provider" onClick={() => void runAction(() => auth.connectGoogle(['calendar', 'gmail'], '/settings/connections?enable=calendar'))}>
@@ -158,7 +162,7 @@ export function GoogleSection() {
             </Actions>
           )}
           <Hint>
-            Read-only. Your server fetches it when the hosts need it; nothing is stored beyond a short cache on this device. Remove access any time
+            Calendar, Gmail and YouTube are read-only. Your server fetches them when the hosts need them; nothing is stored beyond a short cache on this device. Remove access any time
             in your Google Account under Security, Third-party connections.
           </Hint>
         </>

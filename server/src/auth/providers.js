@@ -6,11 +6,20 @@ export const GOOGLE_SCOPES = {
   calendar: 'https://www.googleapis.com/auth/calendar.readonly',
   gmail: 'https://www.googleapis.com/auth/gmail.readonly',
   youtube: 'https://www.googleapis.com/auth/youtube.readonly',
+  /** add events to the listener's own calendar and answer their invitations (asked only when they turn it on) */
+  calendarEvents: 'https://www.googleapis.com/auth/calendar.events',
+  /** read and change their Google Tasks (asked only when they turn it on) */
+  tasks: 'https://www.googleapis.com/auth/tasks',
 };
+/** lowercase short name -> the short name (parseScopeList takes "calendarevents" too) */
+const SHORT_BY_LOWER = new Map(Object.keys(GOOGLE_SCOPES).map((k) => [k.toLowerCase(), k]));
 const GOOGLE_BASE_SCOPES = ['openid', 'email', 'profile'];
 const X_SCOPES = ['users.read', 'tweet.read'];
 
-/** Full Google scope URLs -> short names we expose ('calendar', 'gmail', 'youtube'). */
+/**
+ * Full Google scope URLs -> short names we expose ('calendar', 'gmail', 'youtube', 'calendarEvents', 'tasks'). Exact
+ * URL matches only: calendar.events is calendarEvents, never calendar (read-only) and the other way round.
+ */
 export function shortGoogleScopes(scopeString) {
   const granted = new Set(String(scopeString ?? '').split(/\s+/));
   return Object.entries(GOOGLE_SCOPES)
@@ -21,8 +30,8 @@ export function shortGoogleScopes(scopeString) {
 export function parseScopeList(value) {
   return String(value ?? '')
     .split(/[\s,]+/)
-    .map((s) => s.trim().toLowerCase())
-    .filter((s) => s in GOOGLE_SCOPES);
+    .map((s) => SHORT_BY_LOWER.get(s.trim().toLowerCase()))
+    .filter(Boolean);
 }
 
 async function tokenRequest(url, params, headers = {}) {

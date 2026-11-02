@@ -257,3 +257,14 @@
     display: inline-flex;
   }
 }
+
+/* the call-in sheet while the hosts wait for a yes (ui/actions/ActionCard.tsx) */
+.aw-callin__action {
+  margin-bottom: var(--space-1);
+}
+.aw-callin-remembered.aw-callin-remembered--failed {
+  background: var(--danger-soft);
+}
+.aw-callin-remembered.aw-callin-remembered--failed svg {
+  color: var(--danger);
+}

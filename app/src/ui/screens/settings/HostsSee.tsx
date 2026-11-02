@@ -1,12 +1,15 @@
 // "What your hosts can see" (Settings, linked from Connections): every source the hosts talk from, in plain words.
 // Connected or not, which stations use it, what it holds right now (exactly what the hosts get), when it was fetched,
-// what went wrong last, and what the next break would bring up.
+// what went wrong last, and what the next break would bring up. Then looking things up: the switches, what the hosts
+// found out about what is coming up, and the Lookups list (HostsLookups.tsx).
 import { useState } from 'react';
 import { AlertTriangle, BellRing, Bot, CalendarDays, CloudSun, Heart, Mail, Newspaper, NotebookPen, RefreshCw, Sparkles, type LucideIcon } from 'lucide-react';
 import { hostsView, type SourceId, type SourceView } from '@/core/radio/hostsView';
 import { navigate } from '@/state/router';
 import { Badge, Button, Card, SkeletonText } from '../../components';
 import { Hint, SectionCard, errorText, timeAgo, useLoad } from './account/parts';
+import HostsLookups from './HostsLookups';
+import HostsHeadsUps from './HostsHeadsUps';
 import './account/account.css';
 import './hostsSee.css';
 
@@ -124,6 +127,10 @@ export default function HostsSee() {
           <p className="aw-hostsee__nextnote">Every break also introduces the next song.</p>
         </Card>
       )}
+
+      <HostsHeadsUps fresh={fresh} />
+
+      <HostsLookups desk={data?.desk} fresh={fresh} />
 
       {data?.sources.map((s) => <SourceCard key={s.id} s={s} />)}
     </div>

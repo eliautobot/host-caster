@@ -11,6 +11,7 @@ import { NOTION_CONTEXT_KEY, getNotionPages } from '../context/notion';
 import { feedsReachable, getCalendar, getEmail, getInbox, getNews, sourceKeys } from '../context/sources';
 import { getWeather, weatherKey } from '../context/weather';
 import { getProfile, getSettings, listStations } from '../db';
+import { researchItems, type ResearchItem } from '../agent/brief';
 import type { ContextPacket, SegmentKey, Station } from '../types';
 import { noteKey, planBreak, type BreakPlan } from './planner';
 import { emailSpoken, eventSpoken, weatherSpoken, whenSpoken } from './speakable';
@@ -48,10 +49,17 @@ export interface NextBreakView {
   items: string[];
 }
 
+/** What the research desk looks into from the same packet: the station it would research for, and the items. */
+export interface DeskView {
+  station: Station;
+  items: ResearchItem[];
+}
+
 export interface HostsView {
   at: number;
   sources: SourceView[];
   next?: NextBreakView;
+  desk?: DeskView;
 }
 
 const BUDGET_MS = 15_000;
@@ -119,6 +127,11 @@ function describe(plan: BreakPlan, packet: ContextPacket, now: number): string[]
       case 'inbox':
         out.push('A note from your AI app');
         break;
+      case 'headsUp': {
+        const h = packet.headsUps?.find((x) => `headsup:${x.id}` === i.key);
+        if (h) out.push(`Heads-up: ${h.fact}`);
+        break;
+      }
       case 'weather':
         out.push('The weather');
         break;
@@ -159,7 +172,7 @@ export async function hostsView(opts: { fresh?: boolean; now?: number } = {}): P
       ...split(stations, 'calendar'),
       preview: events.map((e) => ({ text: eventSpoken(e, now), detail: e.location })),
       ...(connected ? await statusOf(sourceKeys.calendar(c), (k) => (k === 'calendar:google' ? 'Google Calendar' : (ics.get(k) ?? ''))) : {}),
-      note: connected ? 'The next 36 hours. The hosts bring up what is soonest first.' : undefined,
+      note: connected ? 'The next 36 hours. The hosts bring up what is soonest first. Holiday and other calendars you only subscribe to are mentioned, never turned into to-dos.' : undefined,
       setup: { label: connected ? 'Change' : 'Connect', to: '/settings/connections' },
     });
   }
@@ -177,7 +190,7 @@ export async function hostsView(opts: { fresh?: boolean; now?: number } = {}): P
       ...split(stations, 'email'),
       preview: mail.map((m) => ({ text: emailSpoken(m).replace(/^a/, 'A'), detail: m.important ? 'Marked important' : undefined })),
       ...(connected ? await statusOf(sourceKeys.email(e), (k) => (k === 'email:gmail' ? 'Gmail' : 'Mailbox')) : {}),
-      note: connected ? 'Unread mail: who wrote and the subject in a few words, never the message itself.' : undefined,
+      note: connected ? 'Unread mail: who wrote and what it is about. A message is read when it matters or when you ask on a call-in; links and addresses never are.' : undefined,
       setup: { label: connected ? 'Change' : 'Connect', to: '/settings/connections' },
     });
   }
@@ -306,13 +319,15 @@ export async function hostsView(opts: { fresh?: boolean; now?: number } = {}): P
 
   // the next break on the station that is playing (or the first one)
   let next: NextBreakView | undefined;
+  let desk: DeskView | undefined;
   const station = stations.find((s) => s.id === settings.activeStationId) ?? stations[0];
   if (station) {
     const packet = await within(buildContext(station, {}, { now, budgetMs: 4000 }), BUDGET_MS);
     if (packet) {
       const plan = planBreak(station, packet, packet.recentBreaks, { now, kind: 'regular' });
       next = { station: station.name, rundown: Boolean(plan.rundown), items: describe(plan, packet, now) };
+      desk = { station, items: researchItems(packet, now) };
     }
   }
-  return { at: now, sources, next };
+  return { at: now, sources, next, desk };
 }

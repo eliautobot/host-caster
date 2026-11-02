@@ -1,6 +1,8 @@
 // "Use your ChatGPT plan": Sign in with ChatGPT for open-source apps, per Host-Caster user. The server is the agent host,
 // keeps each user's registration and tokens, refreshes them, and runs that user's Responses requests. One user's
 // ChatGPT account is never used for another user's requests (every lookup is by the signed-in user's id).
+import { toResponsesInput, toResponsesTools } from '../ai/wire.js';
+import { HttpError } from '../errors.js';
 import { randomToken } from '../crypto.js';
 import { pkcePair, putFlow, takeFlow } from '../auth/flows.js';
 import { chatgptError, TERMINAL_REFRESH, upstreamCode } from './errors.js';
@@ -280,7 +282,7 @@ export function createChatGPT(app, deps = {}) {
     need();
     const active = store.active(userId);
     if (active?.paused_until && active.paused_until > Date.now() && !req.force) throw chatgptError.limit();
-    const input = req.messages.map((m) => ({ role: m.role === 'system' ? 'developer' : m.role, content: m.content }));
+    const input = toResponsesInput(req.messages);
     if (!input.some((m) => m.role === 'user')) input.push({ role: 'user', content: 'Go ahead.' });
     const body = {
       model: req.model,
@@ -288,7 +290,8 @@ export function createChatGPT(app, deps = {}) {
       input,
       // radio lines need no long thinking; dropped if the model does not take it
       reasoning: { effort: 'low' },
-      ...(req.json ? { text: { format: { type: 'json_object' } } } : {}),
+      ...(req.json && !req.tools?.length ? { text: { format: { type: 'json_object' } } } : {}),
+      ...(req.tools?.length ? { tools: toResponsesTools(req.tools) } : {}),
     };
     try {
       return await withToken(userId, async (token) => {
@@ -299,6 +302,7 @@ export function createChatGPT(app, deps = {}) {
             const param = String(err.param ?? '');
             if (err.code === 'chatgpt_unsupported' && i < 2 && body.reasoning && /reasoning/.test(param)) delete body.reasoning;
             else if (err.code === 'chatgpt_unsupported' && i < 2 && body.text && /text|format/.test(param)) delete body.text;
+            else if (err.code === 'chatgpt_unsupported' && body.tools && /tool/.test(`${param} ${err.message}`)) throw new HttpError(400, 'tools_unsupported', 'This ChatGPT model cannot look things up with tools');
             else throw err;
           }
         }

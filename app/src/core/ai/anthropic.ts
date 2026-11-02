@@ -6,7 +6,7 @@ interface MessagesResponse {
   content?: { type: string; text?: string }[];
 }
 
-function headers(brain: Brain): Record<string, string> {
+export function headers(brain: Brain): Record<string, string> {
   return {
     'x-api-key': brain.apiKey ?? '',
     'anthropic-version': '2023-06-01',
@@ -15,7 +15,7 @@ function headers(brain: Brain): Record<string, string> {
   };
 }
 
-const base = (brain: Brain) => brain.baseUrl || 'https://api.anthropic.com';
+export const base = (brain: Brain) => brain.baseUrl || 'https://api.anthropic.com';
 
 export async function anthropicChat(brain: Brain, req: GenerateRequest, opts: FetchOpts): Promise<string> {
   const system = req.json ? `${req.system}\n\nReply with one JSON object only, no other text.` : req.system;

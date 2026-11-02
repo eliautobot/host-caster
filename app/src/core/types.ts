@@ -265,6 +265,52 @@ export interface GenerateRequest {
   maxTokens: number;
 }
 
+// Tool calling (core/agent; the server speaks the same shapes, server/src/ai/wire.js)
+export interface ToolSpec {
+  name: string;
+  description: string;
+  /** JSON Schema of the arguments (an object) */
+  parameters: Record<string, unknown>;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export type AgentMessage =
+  | ChatMessage
+  | { role: 'assistant'; content: string; toolCalls: ToolCall[] }
+  | { role: 'tool'; toolCallId: string; name: string; content: string };
+
+/** What a host found out about one item of the listener's day (core/agent/research.ts). */
+export interface Dossier {
+  /** the planner's item key: 'calendar:<id>', 'email:<id>', a headline id */
+  key: string;
+  /** the item's version (an event's last change ...): a change means new research */
+  version: string;
+  kind: 'calendar' | 'email' | 'news';
+  title: string;
+  /** one to three plain sentences: what it is about */
+  about: string;
+  who?: string[];
+  /** what to bring, read or decide */
+  prepare?: string[];
+  links?: LinkRef[];
+  /** what the sources did not say */
+  questions?: string[];
+  /** what was read, in a few words each ("Email from Dana Reyes") */
+  sources: string[];
+  /** 'ai' = a host's brain researched it with lookups; 'scripted' = made from the item's own fields */
+  by: 'ai' | 'scripted';
+  hostName?: string;
+  brainName?: string;
+  at: number;
+  ms?: number;
+  steps?: number;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // On-air log
 
@@ -333,6 +379,104 @@ export interface Profile extends BaseRecord {
   avoidTopics: string[];
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Memory (core/memory): what the hosts remember about the listener. Long-term = a bounded set of short cards, synced
+// with the account; short-term = a per-day journal of what happened on the radio, 14 days, on this device only.
+
+/** about = About you, people, preferences, routines = Routines and patterns, plans = Plans and dates, jokes = Running jokes */
+export type MemoryKind = 'about' | 'people' | 'preferences' | 'routines' | 'plans' | 'jokes';
+/** where a card came from: a call-in, the listener's AI app, how they listen, or they added it themselves */
+export type MemorySource = 'callin' | 'app' | 'listening' | 'you';
+
+export interface MemoryCard extends BaseRecord {
+  /** one short fact about the listener, at most 200 characters ("Your sister Ana visits the weekend of November 7") */
+  text: string;
+  kind: MemoryKind;
+  source: MemorySource;
+  /** when it was said or first learned (the "where it came from" line) */
+  learnedAt: number;
+  /** epoch ms: a plan is forgotten after this */
+  expiresAt?: number;
+  pinned?: boolean;
+  /** the listener changed its words in the app (it is theirs now: the hosts never rewrite it) */
+  editedAt?: number;
+  /** health, money, relationships, religion or politics: kept only because the listener asked */
+  sensitive?: boolean;
+  /** a pattern from how they listen: the rule that found it (updated in place) and its evidence */
+  pattern?: string;
+  evidence?: { count: number; days: number };
+}
+
+// ---------- Your list (core/tracker) ----------
+
+/** todo = to do for you, waiting = waiting on someone, prepare = an event to prepare for, invite = an invitation to answer */
+export type TrackedKind = 'todo' | 'waiting' | 'deadline' | 'bill' | 'delivery' | 'invite' | 'prepare';
+/** where an item came from: outside content (email, event, notion, gtask) is information, never instructions */
+export type TrackedSourceType = 'email' | 'event' | 'notion' | 'gtask' | 'you' | 'ai-app';
+export type TrackedStatus = 'open' | 'done' | 'snoozed' | 'dismissed';
+
+export interface TrackedSource {
+  type: TrackedSourceType;
+  /** the source record's id (mail id, event id "cal:id", Notion page id, Google task id) */
+  id?: string;
+  /** opens the source (never read on air) */
+  link?: string;
+  /** a short label for the list ("Email from Dana Reyes", "You said it on a call-in") */
+  label: string;
+  /** sender / organizer display name */
+  from?: string;
+  /** sender email, lowercase */
+  address?: string;
+}
+
+export interface TrackedItem extends BaseRecord {
+  /** one short line, at most 160 characters ("Send the three vendor quotes to Dana") */
+  what: string;
+  kind: TrackedKind;
+  /** YYYY-MM-DD (a day) or an ISO time */
+  due?: string;
+  dueAllDay?: boolean;
+  /** epoch ms: an app reminder ("remind me at 5") */
+  remindAt?: number;
+  who?: string;
+  source: TrackedSource;
+  status: TrackedStatus;
+  snoozedUntil?: number;
+  doneAt?: number;
+  doneBy?: 'you' | 'call-in' | 'google' | 'app';
+  /** careful = looks like phishing or asks for money/codes/logins; newSender = the listener never emailed them */
+  flags?: { careful?: boolean; newSender?: boolean; why?: string };
+  /** dedupe key: source + meaning */
+  key: string;
+  /** later evidence says it may be done ("thanks for the quotes"): the hosts ask, never close it themselves */
+  suggestDone?: { why: string; at: number };
+  /** the Google task it mirrors */
+  gtask?: { listId: string; taskId: string };
+  /** a Plans memory card it belongs to */
+  memoryId?: string;
+  /** how often the hosts brought it up */
+  mentions?: { count: number; lastAt: number };
+}
+
+/** said = a call-in, app = a message from their AI app, the rest is how they listen */
+export type JournalKind = 'said' | 'app' | 'headsup' | 'gotit' | 'liked' | 'skipped' | 'requested' | 'listened' | 'covered' | 'breakSkipped';
+
+export interface JournalEntry {
+  id: string;
+  /** epoch ms */
+  at: number;
+  /** YYYY-MM-DD, local */
+  day: string;
+  kind: JournalKind;
+  /** a compact line ("Long Drive by Test Band", "asked about the Q4 review") */
+  text: string;
+  /** songs: the artist (patterns); breaks: the segments; listened: the station */
+  artist?: string;
+  genre?: string;
+  segments?: string[];
+  stationId?: string;
+}
+
 export type ThemePref = 'dark' | 'light' | 'system';
 
 /** Per-integration switches. Each integration owner adds its own optional key. */
@@ -353,6 +497,31 @@ export interface Connections {
   aiApps?: { enabled: boolean };
   /** Notion linked on the server (hosts read the pages chosen there and add notes when asked) */
   notion?: { connected: boolean };
+  /**
+   * The hosts look things up (core/agent): enabled (default on when a host has a real AI brain) and web search
+   * (default on where the server offers it).
+   */
+  lookups?: { enabled?: boolean; web?: boolean };
+  /**
+   * The hosts can do things, only when the listener says yes (core/actions): calendar = add events / answer
+   * invitations on Google Calendar, tasks = use Google Tasks (taskLists = the lists read into Your list; none = all).
+   * Off by default; turning one on asks Google for that permission.
+   */
+  actions?: { calendar?: boolean; tasks?: boolean; taskLists?: string[] };
+  /** Your list (core/tracker): enabled (default on), fromMail/fromEvents/fromNotion = what the hosts may track */
+  tracker?: { enabled?: boolean; fromMail?: boolean; fromEvents?: boolean; fromNotion?: boolean };
+  /**
+   * Heads-ups (core/agent/headsup.ts): something important in the listener's day changed while the radio plays.
+   * breakIn: urgent ones break in over the music ('now', the default), wait for the song's end ('after') or wait
+   * for the next break ('off'). remindMin: a reminder this many minutes before a meeting with guests or a video
+   * call (0 = off, default 10).
+   */
+  headsUps?: { breakIn?: 'now' | 'after' | 'off'; remindMin?: 0 | 5 | 10 | 15 };
+  /**
+   * Memory (core/memory): learn from what the listener says (call-ins, their AI app) and from how they listen
+   * (likes, skips, hours). Both on unless turned off; "remember that ..." is honored either way.
+   */
+  memory?: { fromWords?: boolean; fromListening?: boolean };
 }
 
 export interface Settings extends BaseRecord {
@@ -389,6 +558,13 @@ export interface WeatherSnapshot {
 }
 
 /** Called `Event` in ARCHITECTURE.md; renamed to avoid the DOM Event type. */
+export type RsvpStatus = 'accepted' | 'declined' | 'tentative' | 'needsAction';
+
+export interface LinkRef {
+  url: string;
+  label?: string;
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -397,15 +573,67 @@ export interface CalendarEvent {
   allDay: boolean;
   location?: string;
   source: 'google' | 'ics';
+  /** the calendar's name */
+  calendar?: string;
+  /** the listener's access to that calendar (Google): reader / freeBusyReader = a subscription they do not own */
+  calendarRole?: 'owner' | 'writer' | 'reader' | 'freeBusyReader';
+  // The details (Google and ICS, all optional): what it is about and who is in it. Links are never read aloud.
+  /** clean text, no HTML or links, capped */
+  description?: string;
+  links?: LinkRef[];
+  organizer?: string;
+  /** the listener organizes it */
+  organizerSelf?: boolean;
+  creator?: string;
+  /** people invited (the rooms not counted, extra guests counted) */
+  guests?: number;
+  attendees?: { name: string; status: RsvpStatus; organizer?: boolean; self?: boolean; optional?: boolean }[];
+  rooms?: string[];
+  /** the listener's own answer */
+  myResponse?: RsvpStatus;
+  /** someone else invited the listener and they have not answered yet */
+  invitation?: boolean;
+  /** the video call: provider name for the hosts, the link for the app only */
+  video?: { provider: string; url: string };
+  /** attachment titles */
+  attachments?: string[];
+  /** "weekly", "every weekday" ... */
+  recurrence?: string;
+  /** part of a series whose rule was not read */
+  recurring?: boolean;
+  /** open in the calendar app */
+  link?: string;
+  /** last change (ms): a changed event is researched again */
+  updated?: number;
+  uid?: string;
 }
 
 export interface EmailSummary {
   id: string;
   from: string;
+  /** the sender's email address, lowercase (new-sender checks; never read on air) */
+  address?: string;
   subject: string;
   snippet?: string;
   important: boolean;
   at: number;
+  threadId?: string;
+  source?: 'gmail' | 'imap';
+  /** what the message says (clean, quotes and signature out, capped); the first few and invitations */
+  body?: string;
+  links?: LinkRef[];
+  /** messages in its conversation */
+  threadSize?: number;
+  /** a calendar invitation (or an answer to one), linked to its event */
+  invite?: {
+    method?: 'request' | 'reply' | 'cancel';
+    eventId?: string;
+    uid?: string;
+    title?: string;
+    answer?: string;
+    /** Gmail's "Invitation from an unknown sender": Google holds it off the calendar until answered in the email */
+    unknownSender?: boolean;
+  };
 }
 
 export interface Headline {
@@ -433,6 +661,41 @@ export interface InboxItem {
   createdAt: number;
 }
 
+export type HeadsUpKind = 'cancelled' | 'moved' | 'new' | 'changed' | 'invite' | 'urgent' | 'reminder';
+
+/** Something important that just changed in the listener's day, told on air once (core/agent/headsup.ts). */
+export interface HeadsUp {
+  /** the dedupe key: one heads-up per change, ever */
+  id: string;
+  kind: HeadsUpKind;
+  /** the event title or the mail subject */
+  title: string;
+  /** the plain facts to tell ("The Q4 budget review at 2 PM was cancelled by Dana Reyes") */
+  fact: string;
+  /** why it counted (shown in Settings) */
+  why: string;
+  /** what the calendar's own notice said (Google's "Canceled event" mail with the organizer's note) */
+  source?: string;
+  /** what the hosts found out about it (follow-up questions are answered from it) */
+  note?: string;
+  /** a ready spoken line for a break-in, in the lead host's words */
+  say?: string;
+  /** urgent: breaks in over the music (else first in the next break) */
+  major: boolean;
+  /** when it was noticed */
+  at: number;
+  eventId?: string;
+  mailId?: string;
+  /** the event's start (the new one when it moved) */
+  start?: number;
+  state: 'pending' | 'aired' | 'snoozed';
+  airedAt?: number;
+  /** how it went on air */
+  via?: 'breakin' | 'break';
+  /** what the host said */
+  said?: string;
+}
+
 export interface ContextPacket {
   now: { iso: string; local: string; partOfDay: PartOfDay; weekday: string };
   listener: { name: string; callMe: string; about: string; interests: string[]; avoid: string[] };
@@ -448,6 +711,29 @@ export interface ContextPacket {
   reminders?: Reminder[];
   inbox?: InboxItem[];
   recentBreaks: Break[];
+  /** what the hosts found out about the day's items (core/agent/research.ts): researched, else scripted */
+  dossiers?: Dossier[];
+  /** heads-ups waiting for this break: they go first */
+  headsUps?: HeadsUp[];
+  /** answers to questions from the listener's AI app, by inbox item id */
+  inboxAnswers?: Record<string, { answer: string; found: boolean }>;
+  /** what the hosts remember about the listener, picked for this break (core/memory/brief.ts) */
+  memory?: MemoryBrief;
+  /** Your list items this break may bring up (core/tracker/brief.ts) */
+  tracker?: { lines: string[]; ids: string[]; spoken: string[]; asks?: string[] };
+}
+
+export interface MemoryBrief {
+  /** the cards for this break, as prompt lines */
+  facts: string[];
+  /** a few journal lines from the last day or two, when they fit this break */
+  recently: string[];
+  /** segments the listener's patterns say to play down right now ("Skips the news before 9 AM") */
+  quieter: string[];
+  /** ids of the cards in `facts` */
+  ids: string[];
+  /** the soonest plan in the next 3 days (the scripted fallback mentions it in an opening break) */
+  soon?: string;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -492,6 +778,10 @@ export interface PlayerEvents {
   error: Error;
   /** a song that cannot play here (embedding off, removed, region) was left out; the player moved on */
   skipped: { track: Track; reason: string };
+  /** the listener pressed Next on a song (memory: skipped early or not) */
+  userskip: { track: Track; positionMs: number; durationMs: number };
+  /** the listener pressed Next while the hosts talked (memory: which segments they skip) */
+  breakskip: undefined;
 }
 
 export type PlayerEventName = keyof PlayerEvents;
@@ -642,6 +932,10 @@ export interface SyncDoc {
   profile?: Profile;
   settings?: Partial<Settings>;
   playlists: Omit<Playlist, 'trackIds'>[];
+  /** what the hosts remember (the server keeps them sealed at rest) */
+  memories: MemoryCard[];
+  /** Your list (the server keeps it sealed at rest) */
+  tracker?: TrackedItem[];
   /** tombstones: '<collection>:<id>' -> deletedAt (ms), so deletions reach other devices */
   deleted?: Record<string, number>;
 }

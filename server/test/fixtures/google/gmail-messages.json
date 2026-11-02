@@ -1,0 +1,620 @@
+{
+  "_note": "Real Gmail API v1 users.messages.get format=full shapes (part tree, mime types, header names, attachmentIds from the test account); content replaced with made-up text and example.com addresses.",
+  "invite": {
+    "id": "18f0000000000001",
+    "threadId": "18f0000000000001",
+    "labelIds": [
+      "UNREAD",
+      "IMPORTANT",
+      "CATEGORY_PERSONAL",
+      "INBOX"
+    ],
+    "snippet": "You have been invited to the following event. Q4 budget review Monday Nov 9, 2026 ⋅ 2pm – 3pm Eastern Time - New York Location Room 4B Agenda 1. Vendor numbers 2. Q4 plan",
+    "historyId": "100",
+    "internalDate": "1793563200000",
+    "sizeEstimate": 30000,
+    "payload": {
+      "mimeType": "multipart/mixed",
+      "headers": [
+        {
+          "name": "Reply-To",
+          "value": "dana@example.com"
+        },
+        {
+          "name": "Sender",
+          "value": "Google Calendar <calendar-notification@google.com>"
+        },
+        {
+          "name": "Message-ID",
+          "value": "<calendar-1@google.com>"
+        },
+        {
+          "name": "Date",
+          "value": "Sun, 1 Nov 2026 07:00:00 -0500"
+        },
+        {
+          "name": "Subject",
+          "value": "Invitation: Q4 budget review @ Mon Nov 9, 2026 2pm - 3pm (EST) (me@example.com)"
+        },
+        {
+          "name": "From",
+          "value": "Dana Reyes <dana@example.com>"
+        },
+        {
+          "name": "To",
+          "value": "me@example.com"
+        },
+        {
+          "name": "Content-Type",
+          "value": "multipart/mixed; boundary=\"0000000000005aef7d065f1439ac\""
+        }
+      ],
+      "body": {},
+      "parts": [
+        {
+          "mimeType": "multipart/alternative",
+          "partId": "0",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "multipart/alternative; boundary=\"0000000000005aef7c065f1439aa\""
+            }
+          ],
+          "body": {},
+          "parts": [
+            {
+              "mimeType": "text/plain",
+              "partId": "0.0",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes"
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "base64"
+                }
+              ],
+              "body": {
+                "data": "WW91IGhhdmUgYmVlbiBpbnZpdGVkIHRvIHRoZSBmb2xsb3dpbmcgZXZlbnQuCgpRNCBidWRnZXQgcmV2aWV3Ck1vbmRheSBOb3YgOSwgMjAyNiDii4UgMnBtIOKAkyAzcG0KRWFzdGVybiBUaW1lIC0gTmV3IFlvcmsKCkxvY2F0aW9uClJvb20gNEIKCkFnZW5kYQoxLiBWZW5kb3IgbnVtYmVycwoyLiBRNCBwbGFuCgpKb2luIHdpdGggR29vZ2xlIE1lZXQKaHR0cHM6Ly9tZWV0Lmdvb2dsZS5jb20vYWJjLWRlZmctaGlqCgpPcmdhbml6ZXIKRGFuYSBSZXllcwpkYW5hQGV4YW1wbGUuY29tCgpHdWVzdHMKRGFuYSBSZXllcyAtIG9yZ2FuaXplcgpNaWtlIENoZW4KbWVAZXhhbXBsZS5jb20KClZpZXcgYWxsIGd1ZXN0IGluZm8gaHR0cHM6Ly9jYWxlbmRhci5nb29nbGUuY29tL2NhbGVuZGFyL2V2ZW50P2FjdGlvbj1WSUVXJmVpZD1ZV0pqTUdSbGJXOHdaWFpsYm5Rd2NUUnlNREF3TVNCdFpVQmxlR0Z0Y0d4bExtTnZiUSZ0b2s9WAoKUmVwbHkgZm9yIG1lQGV4YW1wbGUuY29tCgpJbnZpdGF0aW9uIGZyb20gR29vZ2xlIENhbGVuZGFyCg",
+                "size": 534
+              }
+            },
+            {
+              "mimeType": "text/html",
+              "partId": "0.1",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "data": "PGh0bWw-PGJvZHk-PHRhYmxlPjx0cj48dGQ-PGgyIGl0ZW1wcm9wPSJuYW1lIj5RNCBidWRnZXQgcmV2aWV3PC9oMj48YSBocmVmPSJodHRwczovL2NhbGVuZGFyLmdvb2dsZS5jb20vY2FsZW5kYXIvZXZlbnQ_YWN0aW9uPVZJRVcmYW1wO2VpZD1ZV0pqTUdSbGJXOHdaWFpsYm5Rd2NUUnlNREF3TVNCdFpVQmxlR0Z0Y0d4bExtTnZiUSZhbXA7dG9rPVgiPlZpZXcgYWxsIGd1ZXN0IGluZm88L2E-PHA-QWdlbmRhPGJyPjEuIFZlbmRvciBudW1iZXJzPGJyPjIuIFE0IHBsYW48L3A-PGEgaHJlZj0iaHR0cHM6Ly9tZWV0Lmdvb2dsZS5jb20vYWJjLWRlZmctaGlqIj5Kb2luIHdpdGggR29vZ2xlIE1lZXQ8L2E-PC90ZD48L3RyPjwvdGFibGU-PC9ib2R5PjwvaHRtbD4",
+                "size": 382
+              }
+            },
+            {
+              "filename": "invite.ics",
+              "mimeType": "text/calendar",
+              "partId": "0.2",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/calendar; charset=\"UTF-8\"; method=REPLY"
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "7bit"
+                }
+              ],
+              "body": {
+                "attachmentId": "ATT_text_calendar",
+                "size": 819
+              }
+            }
+          ]
+        },
+        {
+          "filename": "invite.ics",
+          "mimeType": "application/ics",
+          "partId": "1",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "application/ics; name=\"invite.ics\""
+            },
+            {
+              "name": "Content-Disposition",
+              "value": "attachment; filename=\"invite.ics\""
+            },
+            {
+              "name": "Content-Transfer-Encoding",
+              "value": "base64"
+            }
+          ],
+          "body": {
+            "attachmentId": "ATT_application_ics",
+            "size": 819
+          }
+        }
+      ],
+      "partId": ""
+    }
+  },
+  "dana": {
+    "id": "18f0000000000002",
+    "threadId": "18f00000000000aa",
+    "labelIds": [
+      "UNREAD",
+      "IMPORTANT",
+      "CATEGORY_PERSONAL",
+      "INBOX"
+    ],
+    "snippet": "Hi, For the Q4 budget review on Monday, please bring the vendor numbers (the three quotes from October). Mike will cover the Q4 plan.",
+    "historyId": "100",
+    "internalDate": "1793566800000",
+    "sizeEstimate": 30000,
+    "payload": {
+      "mimeType": "multipart/alternative",
+      "headers": [
+        {
+          "name": "From",
+          "value": "Dana Reyes <dana@example.com>"
+        },
+        {
+          "name": "To",
+          "value": "me@example.com"
+        },
+        {
+          "name": "Subject",
+          "value": "Re: Q4 budget review"
+        },
+        {
+          "name": "Message-ID",
+          "value": "<dana-2@example.com>"
+        },
+        {
+          "name": "Date",
+          "value": "Sun, 1 Nov 2026 08:00:00 -0500"
+        },
+        {
+          "name": "Content-Type",
+          "value": "multipart/alternative; boundary=\"--_NmP-28ecc7d6106640d6-Part_1\""
+        }
+      ],
+      "body": {},
+      "parts": [
+        {
+          "mimeType": "text/plain",
+          "partId": "0",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "text/plain; charset=utf-8"
+            },
+            {
+              "name": "Content-Transfer-Encoding",
+              "value": "quoted-printable"
+            }
+          ],
+          "body": {
+            "data": "SGksCgpGb3IgdGhlIFE0IGJ1ZGdldCByZXZpZXcgb24gTW9uZGF5LCBwbGVhc2UgYnJpbmcgdGhlIHZlbmRvciBudW1iZXJzICh0aGUgdGhyZWUgcXVvdGVzIGZyb20gT2N0b2JlcikuIE1pa2Ugd2lsbCBjb3ZlciB0aGUgUTQgcGxhbi4KClRoZSBkcmFmdCBpcyBoZXJlOiBodHRwczovL2RvY3MuZXhhbXBsZS5jb20vcTQtZHJhZnQKClRoYW5rcywKRGFuYQoKT24gRnJpLCBPY3QgMzAsIDIwMjYgYXQgNDoxMiBQTSBNaWtlIENoZW4gPG1pa2VAZXhhbXBsZS5jb20-IHdyb3RlOgo-IFNvdW5kcyBnb29kLCBJIHdpbGwgc2VuZCB0aGUgcGxhbiBNb25kYXkuCg",
+            "size": 316
+          }
+        },
+        {
+          "mimeType": "multipart/related",
+          "partId": "1",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "multipart/related; type=\"text/html\"; boundary=\"--_NmP-28ecc7d6106640d6-Part_3\""
+            }
+          ],
+          "body": {},
+          "parts": [
+            {
+              "mimeType": "text/html",
+              "partId": "1.0",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=utf-8"
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "data": "PGRpdiBkaXI9Imx0ciI-SGksPGJyPjxicj5Gb3IgdGhlIFE0IGJ1ZGdldCByZXZpZXcgb24gTW9uZGF5LCBwbGVhc2UgYnJpbmcgdGhlIDxiPnZlbmRvciBudW1iZXJzPC9iPiAodGhlIHRocmVlIHF1b3RlcyBmcm9tIE9jdG9iZXIpLiBNaWtlIHdpbGwgY292ZXIgdGhlIFE0IHBsYW4uPGJyPjxicj5UaGUgZHJhZnQgaXMgPGEgaHJlZj0iaHR0cHM6Ly9kb2NzLmV4YW1wbGUuY29tL3E0LWRyYWZ0Ij5oZXJlPC9hPi48YnI-PGJyPlRoYW5rcyw8YnI-RGFuYTwvZGl2Pjxicj48ZGl2IGNsYXNzPSJnbWFpbF9xdW90ZSI-PGRpdiBkaXI9Imx0ciIgY2xhc3M9ImdtYWlsX2F0dHIiPk9uIEZyaSwgT2N0IDMwLCAyMDI2IGF0IDQ6MTIgUE0gTWlrZSBDaGVuICZsdDttaWtlQGV4YW1wbGUuY29tJmd0OyB3cm90ZTo8YnI-PC9kaXY-PGJsb2NrcXVvdGUgY2xhc3M9ImdtYWlsX3F1b3RlIj5Tb3VuZHMgZ29vZCwgSSB3aWxsIHNlbmQgdGhlIHBsYW4gTW9uZGF5LjwvYmxvY2txdW90ZT48L2Rpdj48aW1nIHNyYz0iY2lkOmxvZ28iPg",
+                "size": 523
+              }
+            },
+            {
+              "filename": "banner.jpg",
+              "mimeType": "image/jpeg",
+              "partId": "1.1",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "image/jpeg; name=banner.jpg"
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "base64"
+                },
+                {
+                  "name": "Content-Disposition",
+                  "value": "inline; filename=banner.jpg"
+                }
+              ],
+              "body": {
+                "attachmentId": "ATT_image_jpeg",
+                "size": 47375
+              }
+            },
+            {
+              "filename": "city.jpg",
+              "mimeType": "image/jpeg",
+              "partId": "1.2",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "image/jpeg; name=city.jpg"
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "base64"
+                },
+                {
+                  "name": "Content-Disposition",
+                  "value": "inline; filename=city.jpg"
+                }
+              ],
+              "body": {
+                "attachmentId": "ATT_image_jpeg",
+                "size": 50051
+              }
+            }
+          ]
+        }
+      ],
+      "partId": ""
+    }
+  },
+  "accept": {
+    "id": "18f0000000000003",
+    "threadId": "18f0000000000003",
+    "labelIds": [
+      "UNREAD",
+      "CATEGORY_PERSONAL",
+      "INBOX"
+    ],
+    "snippet": "Mike Chen has accepted this invitation.",
+    "historyId": "100",
+    "internalDate": "1793570400000",
+    "sizeEstimate": 30000,
+    "payload": {
+      "mimeType": "multipart/mixed",
+      "headers": [
+        {
+          "name": "Reply-To",
+          "value": "mike@example.com"
+        },
+        {
+          "name": "Sender",
+          "value": "Google Calendar <calendar-notification@google.com>"
+        },
+        {
+          "name": "Message-ID",
+          "value": "<calendar-3@google.com>"
+        },
+        {
+          "name": "Date",
+          "value": "Sun, 1 Nov 2026 09:00:00 -0500"
+        },
+        {
+          "name": "Subject",
+          "value": "Accepted: Q4 budget review @ Mon Nov 9, 2026 2pm - 3pm (EST) (dana@example.com)"
+        },
+        {
+          "name": "From",
+          "value": "Mike Chen <mike@example.com>"
+        },
+        {
+          "name": "To",
+          "value": "dana@example.com"
+        },
+        {
+          "name": "Content-Type",
+          "value": "multipart/mixed; boundary=\"0000000000005aef7d065f1439ac\""
+        }
+      ],
+      "body": {},
+      "parts": [
+        {
+          "mimeType": "multipart/alternative",
+          "partId": "0",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "multipart/alternative; boundary=\"0000000000005aef7c065f1439aa\""
+            }
+          ],
+          "body": {},
+          "parts": [
+            {
+              "mimeType": "text/plain",
+              "partId": "0.0",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes"
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "base64"
+                }
+              ],
+              "body": {
+                "data": "TWlrZSBDaGVuIGhhcyBhY2NlcHRlZCB0aGlzIGludml0YXRpb24uCgpRNCBidWRnZXQgcmV2aWV3Ck1vbmRheSBOb3YgOSwgMjAyNiDii4UgMnBtIOKAkyAzcG0K",
+                "size": 93
+              }
+            },
+            {
+              "mimeType": "text/html",
+              "partId": "0.1",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "data": "PHA-TWlrZSBDaGVuIGhhcyBhY2NlcHRlZCB0aGlzIGludml0YXRpb24uPC9wPjxhIGhyZWY9Imh0dHBzOi8vY2FsZW5kYXIuZ29vZ2xlLmNvbS9jYWxlbmRhci9ldmVudD9hY3Rpb249VklFVyZhbXA7ZWlkPVlXSmpNR1JsYlc4d1pYWmxiblF3Y1RSeU1EQXdNU0J0WlVCbGVHRnRjR3hsTG1OdmJRIj5RNCBidWRnZXQgcmV2aWV3PC9hPg",
+                "size": 195
+              }
+            },
+            {
+              "filename": "invite.ics",
+              "mimeType": "text/calendar",
+              "partId": "0.2",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/calendar; charset=\"UTF-8\"; method=REPLY"
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "7bit"
+                }
+              ],
+              "body": {
+                "attachmentId": "ATT_text_calendar",
+                "size": 817
+              }
+            }
+          ]
+        },
+        {
+          "filename": "invite.ics",
+          "mimeType": "application/ics",
+          "partId": "1",
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "application/ics; name=\"invite.ics\""
+            },
+            {
+              "name": "Content-Disposition",
+              "value": "attachment; filename=\"invite.ics\""
+            },
+            {
+              "name": "Content-Transfer-Encoding",
+              "value": "base64"
+            }
+          ],
+          "body": {
+            "attachmentId": "ATT_application_ics",
+            "size": 817
+          }
+        }
+      ],
+      "partId": ""
+    }
+  },
+  "thread": {
+    "id": "18f00000000000aa",
+    "historyId": "101",
+    "messages": [
+      {
+        "id": "18f00000000000a0",
+        "threadId": "18f00000000000aa",
+        "labelIds": [
+          "INBOX"
+        ],
+        "snippet": "Sounds good, I will send the plan Monday.",
+        "internalDate": "1793466720000",
+        "payload": {
+          "partId": "",
+          "mimeType": "text/plain",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Mike Chen <mike@example.com>"
+            },
+            {
+              "name": "Subject",
+              "value": "Q4 budget review"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 30 Oct 2026 16:12:00 -0400"
+            }
+          ],
+          "body": {
+            "size": 42,
+            "data": "U291bmRzIGdvb2QsIEkgd2lsbCBzZW5kIHRoZSBwbGFuIE1vbmRheS4K"
+          }
+        }
+      },
+      {
+        "id": "18f0000000000002",
+        "threadId": "18f00000000000aa",
+        "labelIds": [
+          "UNREAD",
+          "IMPORTANT",
+          "CATEGORY_PERSONAL",
+          "INBOX"
+        ],
+        "snippet": "Hi, For the Q4 budget review on Monday, please bring the vendor numbers (the three quotes from October). Mike will cover the Q4 plan.",
+        "historyId": "100",
+        "internalDate": "1793566800000",
+        "sizeEstimate": 30000,
+        "payload": {
+          "mimeType": "multipart/alternative",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Dana Reyes <dana@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "me@example.com"
+            },
+            {
+              "name": "Subject",
+              "value": "Re: Q4 budget review"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<dana-2@example.com>"
+            },
+            {
+              "name": "Date",
+              "value": "Sun, 1 Nov 2026 08:00:00 -0500"
+            },
+            {
+              "name": "Content-Type",
+              "value": "multipart/alternative; boundary=\"--_NmP-28ecc7d6106640d6-Part_1\""
+            }
+          ],
+          "body": {},
+          "parts": [
+            {
+              "mimeType": "text/plain",
+              "partId": "0",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=utf-8"
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "data": "SGksCgpGb3IgdGhlIFE0IGJ1ZGdldCByZXZpZXcgb24gTW9uZGF5LCBwbGVhc2UgYnJpbmcgdGhlIHZlbmRvciBudW1iZXJzICh0aGUgdGhyZWUgcXVvdGVzIGZyb20gT2N0b2JlcikuIE1pa2Ugd2lsbCBjb3ZlciB0aGUgUTQgcGxhbi4KClRoZSBkcmFmdCBpcyBoZXJlOiBodHRwczovL2RvY3MuZXhhbXBsZS5jb20vcTQtZHJhZnQKClRoYW5rcywKRGFuYQoKT24gRnJpLCBPY3QgMzAsIDIwMjYgYXQgNDoxMiBQTSBNaWtlIENoZW4gPG1pa2VAZXhhbXBsZS5jb20-IHdyb3RlOgo-IFNvdW5kcyBnb29kLCBJIHdpbGwgc2VuZCB0aGUgcGxhbiBNb25kYXkuCg",
+                "size": 316
+              }
+            },
+            {
+              "mimeType": "multipart/related",
+              "partId": "1",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "multipart/related; type=\"text/html\"; boundary=\"--_NmP-28ecc7d6106640d6-Part_3\""
+                }
+              ],
+              "body": {},
+              "parts": [
+                {
+                  "mimeType": "text/html",
+                  "partId": "1.0",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "text/html; charset=utf-8"
+                    },
+                    {
+                      "name": "Content-Transfer-Encoding",
+                      "value": "quoted-printable"
+                    }
+                  ],
+                  "body": {
+                    "data": "PGRpdiBkaXI9Imx0ciI-SGksPGJyPjxicj5Gb3IgdGhlIFE0IGJ1ZGdldCByZXZpZXcgb24gTW9uZGF5LCBwbGVhc2UgYnJpbmcgdGhlIDxiPnZlbmRvciBudW1iZXJzPC9iPiAodGhlIHRocmVlIHF1b3RlcyBmcm9tIE9jdG9iZXIpLiBNaWtlIHdpbGwgY292ZXIgdGhlIFE0IHBsYW4uPGJyPjxicj5UaGUgZHJhZnQgaXMgPGEgaHJlZj0iaHR0cHM6Ly9kb2NzLmV4YW1wbGUuY29tL3E0LWRyYWZ0Ij5oZXJlPC9hPi48YnI-PGJyPlRoYW5rcyw8YnI-RGFuYTwvZGl2Pjxicj48ZGl2IGNsYXNzPSJnbWFpbF9xdW90ZSI-PGRpdiBkaXI9Imx0ciIgY2xhc3M9ImdtYWlsX2F0dHIiPk9uIEZyaSwgT2N0IDMwLCAyMDI2IGF0IDQ6MTIgUE0gTWlrZSBDaGVuICZsdDttaWtlQGV4YW1wbGUuY29tJmd0OyB3cm90ZTo8YnI-PC9kaXY-PGJsb2NrcXVvdGUgY2xhc3M9ImdtYWlsX3F1b3RlIj5Tb3VuZHMgZ29vZCwgSSB3aWxsIHNlbmQgdGhlIHBsYW4gTW9uZGF5LjwvYmxvY2txdW90ZT48L2Rpdj48aW1nIHNyYz0iY2lkOmxvZ28iPg",
+                    "size": 523
+                  }
+                },
+                {
+                  "filename": "banner.jpg",
+                  "mimeType": "image/jpeg",
+                  "partId": "1.1",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "image/jpeg; name=banner.jpg"
+                    },
+                    {
+                      "name": "Content-Transfer-Encoding",
+                      "value": "base64"
+                    },
+                    {
+                      "name": "Content-Disposition",
+                      "value": "inline; filename=banner.jpg"
+                    }
+                  ],
+                  "body": {
+                    "attachmentId": "ATT_image_jpeg",
+                    "size": 47375
+                  }
+                },
+                {
+                  "filename": "city.jpg",
+                  "mimeType": "image/jpeg",
+                  "partId": "1.2",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "image/jpeg; name=city.jpg"
+                    },
+                    {
+                      "name": "Content-Transfer-Encoding",
+                      "value": "base64"
+                    },
+                    {
+                      "name": "Content-Disposition",
+                      "value": "inline; filename=city.jpg"
+                    }
+                  ],
+                  "body": {
+                    "attachmentId": "ATT_image_jpeg",
+                    "size": 50051
+                  }
+                }
+              ]
+            }
+          ],
+          "partId": ""
+        }
+      }
+    ]
+  },
+  "attachments": {
+    "ATT_text_calendar": "BEGIN:VCALENDAR\r\nPRODID:-//Google Inc//Google Calendar 70.9054//EN\r\nVERSION:2.0\r\nCALSCALE:GREGORIAN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nDTSTART:20261109T190000Z\r\nDTEND:20261109T200000Z\r\nDTSTAMP:20261101T120000Z\r\nORGANIZER;CN=Dana Reyes:mailto:dana@example.com\r\nUID:me@example.com\r\nATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Dana Reyes;X-NUM-GUESTS=0:mailto:dana@example.com\r\nATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=me@example.com;X-NUM-GUESTS=0:mailto:me@example.com\r\nATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=TENTATIVE;CN=Mike Chen;X-NUM-GUESTS=0:mailto:mike@example.com\r\nDESCRIPTION:Agenda\\n1. Vendor numbers\\n2. Q4 plan\r\nLOCATION:Room 4B\r\nSEQUENCE:0\r\nSTATUS:CONFIRMED\r\nSUMMARY:Q4 budget review\r\nTRANSP:OPAQUE\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+    "ATT_application_ics": "BEGIN:VCALENDAR\r\nPRODID:-//Google Inc//Google Calendar 70.9054//EN\r\nVERSION:2.0\r\nCALSCALE:GREGORIAN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nDTSTART:20261109T190000Z\r\nDTEND:20261109T200000Z\r\nDTSTAMP:20261101T120000Z\r\nORGANIZER;CN=Dana Reyes:mailto:dana@example.com\r\nUID:me@example.com\r\nATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Dana Reyes;X-NUM-GUESTS=0:mailto:dana@example.com\r\nATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=me@example.com;X-NUM-GUESTS=0:mailto:me@example.com\r\nATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=TENTATIVE;CN=Mike Chen;X-NUM-GUESTS=0:mailto:mike@example.com\r\nDESCRIPTION:Agenda\\n1. Vendor numbers\\n2. Q4 plan\r\nLOCATION:Room 4B\r\nSEQUENCE:0\r\nSTATUS:CONFIRMED\r\nSUMMARY:Q4 budget review\r\nTRANSP:OPAQUE\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+  }
+}

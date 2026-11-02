@@ -99,7 +99,7 @@ export function OnAirStrip({ variant = 'sheet', when, className }: OnAirStripPro
         </span>
         {talkButton}
       </section>
-      <CallInSheet open={callIn} onClose={() => setCallIn(false)} />
+      <CallInSheet open={callIn} onClose={() => setCallIn(false)} onOpen={() => setCallIn(true)} />
       {variant === 'sheet' && <ReportBreakSheet target={report} onClose={() => setReport(undefined)} />}
     </>
   );
@@ -113,7 +113,7 @@ export function TalkToHostsButton(props: { size?: 'sm' | 'md' | 'lg'; variant?: 
       <Button size={props.size ?? 'md'} variant={props.variant ?? 'secondary'} icon={Mic} className={props.className} onClick={() => setOpen(true)}>
         {props.label ?? 'Talk to the hosts'}
       </Button>
-      <CallInSheet open={open} onClose={() => setOpen(false)} />
+      <CallInSheet open={open} onClose={() => setOpen(false)} onOpen={() => setOpen(true)} />
     </>
   );
 }

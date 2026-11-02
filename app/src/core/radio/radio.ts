@@ -5,16 +5,24 @@ import { addBreak, getSettings, getStation, saveSettings } from '../db';
 import { markInboxUsed } from '../context/sources';
 import { anyApp, mediaNotification, type AnyAppNowPlaying } from '../native';
 import { player } from '../player';
-import type { Break, BreakLine, RadioEventName, RadioEvents, RadioState, Station, Track, TrackSummary } from '../types';
+import type { Break, BreakLine, HeadsUp, RadioEventName, RadioEvents, RadioState, Station, Track, TrackSummary, VoiceClip } from '../types';
+import { claim, headsUpWatch, listHeadsUps, markAired, pendingHeadsUps, release, snoozeLast } from '../agent/headsup';
+import { deliveryFor, isAcknowledgement, scriptedSay } from '../agent/changes';
 import { createEmitter } from '../util/emitter';
 import { airBreak, type AirMode } from './air';
 import { planTopicKeys, shouldBreakAfter, type BreakKind } from './planner';
 import { skippedNotice, standInNotice } from './notice';
-import { loadLineup, prepareBreak, warmUpBrains, type PreparedBreak } from './prepare';
+import { deviceStandIn, loadLineup, prepareBreak, warmUpBrains, type PreparedBreak } from './prepare';
+import { speak } from '../voice/voice';
 import { extendQueue, stationQueue } from './queue';
 import { isMood, isSongRequest, nextInboxRequest, queueRequest, requestQuery, type SongRequest } from './requests';
 import type { NotionWrite } from './notionAsk';
-import { maybeNotionRecap, nextInboxNotionWrite, takeNotionWrite } from './notionWrite';
+import { learnFromWords, memoryOnPlay, noteBreak, noteGotIt, noteHeadsUp, noteRequested, noteSaid, startMemory, takeMemoryCommand, type MemoryChange } from '../memory';
+import { maybeNotionRecap, nextInboxNotionWrite, stationBrain, takeNotionWrite } from './notionWrite';
+import { takeActionTurn, type ActionTurn } from '../actions/callin';
+import { addItem } from '../tracker/store';
+import { markListAired } from '../tracker/brief';
+import { nextInboxAction } from '../actions/inbox';
 
 /** start writing this long before the song ends (slow local models need the head start) ... */
 const PREP_LEAD_MS = 80_000;
@@ -28,6 +36,14 @@ const LATE_AIR_MS = 20_000;
 /** a call-in on air with less than this left in the song stands in for that song's break (no second break after it) */
 const CALLIN_COVERS_MS = 60_000;
 const PREP_TIMEOUT_MS = 120_000;
+/** a call-in answer that needs a live lookup and is not ready this long after it started: a host holds the line */
+const HOLD_LINE_AFTER_MS = 2500;
+const HOLD_LINES = [
+  'One sec, let me pull that up.',
+  'Good question. Give me a second to check.',
+  "Hang on, I'm looking that up right now.",
+  'Let me check that for you, one moment.',
+];
 
 interface Pending {
   trackId: string;
@@ -60,9 +76,14 @@ class Radio {
   private nextStartAt = 0;
   /** the break on air (not in the log until it ends): the next break's writer must know what was just said */
   private onAirBreak?: Break;
+  /** the segments of the break on air, and the last one a skip was noted for (core/memory journal) */
+  private onAirSegments: string[] = [];
+  private skipNoted?: string;
   private hostNames = new Map<string, string>();
   /** how long the last breaks took to get ready (ms), newest last */
   private prepTimes: number[] = [];
+  /** heads-up lines voiced ahead for the break after this song (it was written before they came in) */
+  private headsUpLines = new Map<string, { text: string; clip: Promise<VoiceClip> }>();
 
   get state(): RadioState {
     return this._state;
@@ -108,6 +129,7 @@ class Radio {
     this.stop();
     const station = await getStation(stationId);
     if (!station) throw new Error('That station was deleted');
+    startMemory();
     const q = await stationQueue(station);
     if (q.anyApp) {
       if (!anyApp.available) throw new Error('Any music app mode needs the Host-Caster Android app');
@@ -130,6 +152,8 @@ class Radio {
     void warmUpBrains(station);
     this.set({ stationId: station.id, onAir: true, phase: 'music', speakingHostId: undefined, caption: undefined, script: undefined, notice: undefined, noticeLink: undefined, nextBreakIn: 1 });
     this.subscribe(session);
+    // heads-ups: the calendar and mail are checked every few minutes while the radio plays
+    headsUpWatch.start(station, { playing: () => this.isPlaying(), deliver: (h) => this.deliverHeadsUp(h) });
     if (q.anyApp) {
       this.anyAppKey = '';
       this.anyAppPrev = undefined;
@@ -152,6 +176,8 @@ class Radio {
     this.timers.clear();
     this.pending?.controller.abort();
     this.pending = undefined;
+    headsUpWatch.stop();
+    this.headsUpLines.clear();
     if (this._state.onAir && !this.anyAppMode) player.pause();
     if (this.anyAppMode) {
       void anyApp.stop();
@@ -189,23 +215,83 @@ class Radio {
     if (!station) return;
     const session = this.session;
     const said = prompt?.trim() || 'Just checking in. What is going on?';
+    // "got it, thanks" after a heads-up: that item is not told again (no reminder on top of it)
+    if (isAcknowledgement(said)) {
+      await snoozeLast().catch(() => undefined);
+      void noteGotIt(said);
+    }
+    // what they said goes in the journal; "remember that ..." / "forget that ..." is done now, so the answer confirms it
+    if (prompt?.trim()) void noteSaid(said);
+    const memory = prompt?.trim() ? await takeMemoryCommand(said, 'call').catch(() => undefined) : undefined;
     this.set({ phase: 'preparing', speakingHostId: undefined, caption: undefined, notice: undefined, noticeLink: undefined });
     // the song under the call-in, so the hosts can name what is playing
     const under = this.anyAppMode ? this.anyAppPrev : this.current;
     const request = await this.takeRequest(said);
     // "add oat milk to my list": added to Notion now, so the answer can confirm it
-    const notion = await takeNotionWrite(said, station).catch(() => undefined);
-    const ready = await this.prepare(station, 'callin', said, new AbortController(), under, undefined, undefined, request, undefined, notion);
+    // words about the calendar, Google Tasks or an invitation are for the actions engine, never a Notion note
+    const forActions = /\b(calendar|google tasks?|invite|invitation|rsvp)\b/i.test(said) && !/\bnotion\b/i.test(said);
+    const notion = forActions ? undefined : await takeNotionWrite(said, station).catch(() => undefined);
+    // a Notion to-do is also on Your list (the listener's own words)
+    if (notion?.ok && notion.kind === 'todo') void addItem({ what: notion.text, kind: 'todo', source: { type: 'you', label: 'You said it on a call-in (also in Notion)' } }).catch(() => undefined);
+    // Your list ("remind me to ...", "I sent the quotes") and things the hosts can do once the listener says yes
+    const action =
+      prompt?.trim() && !request && !notion
+        ? await takeActionTurn({ said, origin: 'call-in', brain: await stationBrain(station).catch(() => undefined) }).catch(() => undefined)
+        : undefined;
+    // a question that needs a live lookup: if the answer is not ready in a moment, a host says so first
+    let hold: Promise<void> | undefined;
+    let settled = false;
+    const onLookup = () =>
+      this.later(() => {
+        if (!settled && !hold && session === this.session) hold = this.sayHoldLine(station).catch(() => undefined);
+      }, HOLD_LINE_AFTER_MS);
+    const ready = await this.prepare(station, 'callin', said, new AbortController(), under, undefined, undefined, request, undefined, notion, onLookup, memory, action);
+    settled = true;
+    // anything else worth remembering: learned while the answer airs (never in the way of it)
+    if (prompt?.trim() && !memory) void learnFromWords(said, 'call', { stationId: station.id });
+    if (hold) await hold;
     if (!ready || session !== this.session) {
       if (session === this.session) this.set({ phase: 'music' });
       if (!ready) throw new Error('Your hosts could not pick up right now. Check the Brains page.');
       return;
     }
-    await this.air(ready, this.anyAppMode ? 'anyapp' : 'over');
+    await this.air(ready, this.anyAppMode ? 'anyapp' : 'over', undefined, { chime: !hold });
+  }
+
+  /** "One sec, let me pull that up": the lead host holds the line over the music while an answer is looked up. */
+  private async sayHoldLine(station: Station): Promise<void> {
+    const host = (await loadLineup(station))[0];
+    if (!host) return;
+    const text = HOLD_LINES[Math.floor(Math.random() * HOLD_LINES.length)]!;
+    const clip = await speak(host, text, { timeoutMs: 6000 }).catch(() => speak(deviceStandIn(host), text));
+    const session = this.session;
+    const mini = {
+      station,
+      hosts: [host],
+      plan: { kind: 'callin', topics: [], items: [], lines: 1, outro: false, intro: false, mix: 0 },
+      packet: {} as PreparedBreak['packet'],
+      lines: [{ hostId: host.id, text }],
+      clips: [clip],
+      mode: 'builtin',
+      tookMs: 0,
+    } satisfies PreparedBreak;
+    const run = async () => {
+      if (session !== this.session) return;
+      this.set({ phase: 'talking', speakingHostId: host.id, caption: text });
+      try {
+        await airBreak(mini, this.anyAppMode ? 'anyapp' : 'over', { chime: true, onLine: () => undefined });
+      } finally {
+        if (session === this.session) this.set({ phase: 'preparing', speakingHostId: undefined, caption: undefined });
+      }
+    };
+    const next = this.airLock.then(run, run);
+    this.airLock = next.catch(() => undefined);
+    await next;
   }
 
   /** Skips the break on air (or the one being prepared). */
   skipBreak(): void {
+    this.noteSkippedBreak();
     this.pending?.controller.abort();
     this.pending = undefined;
     player.stopVoice();
@@ -222,6 +308,7 @@ class Radio {
     this.offs.push(
       player.on('trackstart', (t) => live() && this.onTrackStart(t)),
       player.on('nearend', (t) => live() && this.onNearEnd(t)),
+      player.on('breakskip', () => live() && this.noteSkippedBreak()),
     );
   }
 
@@ -235,6 +322,7 @@ class Radio {
     this.current = track;
     this.nextStartAt = Date.now();
     this.report();
+    memoryOnPlay(station);
     if (this.live || track.source === 'stream' || player.state.live) return this.scheduleStreamBreak(station);
     const due = !this.openingDone || shouldBreakAfter(station, this.songsSinceBreak);
     this.set({ nextBreakIn: due ? 1 : Math.max(1, station.talkEvery - this.songsSinceBreak) });
@@ -279,10 +367,12 @@ class Radio {
       const request = await this.inboxRequest().catch(() => undefined);
       // an AI app asked to add something to Notion: added now, confirmed in this break
       const notion = await nextInboxNotionWrite(station).catch(() => undefined);
+      // an AI app asked the hosts to do something: Your list now, anything else asked in this break (yes = the listener)
+      const action = notion ? undefined : await nextInboxAction(station).catch(() => undefined);
       // songs that cannot play here (checked ahead by the player) leave the queue before the host names one
       await player.aheadReady(4000);
       const q = player.state;
-      return this.prepare(station, kind, undefined, controller, track, this.nextTrack(), q.queue.slice(q.index + 1, q.index + 4), request, deadline, notion);
+      return this.prepare(station, kind, undefined, controller, track, this.nextTrack(), q.queue.slice(q.index + 1, q.index + 4), request, deadline, notion, undefined, undefined, action);
     })().then((b) => {
       entry.done = true;
       entry.ready = b;
@@ -359,6 +449,106 @@ class Radio {
     this.pending = entry;
   }
 
+  // ------------------------------------------------------------------------------------------------ heads-ups
+
+  /** On air and the music playing (heads-ups stay quiet while paused). */
+  private isPlaying(): boolean {
+    return this._state.onAir && (this.anyAppMode || player.state.status === 'playing');
+  }
+
+  /** Something urgent just changed: over the music now, right after this song, or first in the next break. */
+  private async deliverHeadsUp(h: HeadsUp): Promise<void> {
+    const station = this.station;
+    if (!station || !this.isPlaying()) return;
+    const cfg = (await getSettings()).connections.headsUps;
+    const s = player.state;
+    const cur = this.current;
+    const music = Boolean(cur && !this.anyAppMode && !this.live && !s.live);
+    const left = music ? (s.durationMs || cur!.durationMs) - s.positionMs : 0;
+    const now = Date.now();
+    const breakIns = (await listHeadsUps()).filter((x) => x.via === 'breakin' && x.airedAt && now - x.airedAt < 3_600_000).length;
+    const booked = Boolean(cur && this.pending?.trackId === cur.id);
+    const how = deliveryFor(h, { breakIn: cfg?.breakIn ?? 'now', breakInsLastHour: breakIns, songLeftMs: music && left > 0 ? left : undefined, breakAfterSong: booked || this._state.nextBreakIn <= 1 });
+    if (how === 'breakin') return this.breakIn(h);
+    if (how !== 'afterSong' || !music) return;
+    // the break after this song is already being written: its line is voiced now and goes first in it
+    if (booked) this.voiceAhead(h, now + Math.max(0, left));
+    else this.breakAfterSong();
+  }
+
+  private voiceAhead(h: HeadsUp, at: number) {
+    const station = this.station;
+    if (!station || this.headsUpLines.has(h.id)) return;
+    const text = h.say ?? scriptedSay(h, at);
+    const clip = loadLineup(station).then(([lead]) => {
+      if (!lead) throw new Error('This station has no hosts');
+      return speak(lead, text, { timeoutMs: 20_000 }).catch(() => speak(deviceStandIn(lead), text));
+    });
+    clip.catch(() => undefined);
+    this.headsUpLines.set(h.id, { text, clip });
+  }
+
+  /** A break right after the song on now, even when the station would play another song first. */
+  private breakAfterSong() {
+    const cur = this.current;
+    if (!cur || this.pending?.trackId === cur.id || this.coveredTrackId === cur.id) return;
+    const s = player.state;
+    const left = (s.durationMs || cur.durationMs) - s.positionMs;
+    this.set({ nextBreakIn: 1 });
+    this.later(() => this.current?.id === cur.id && this.startPrep(cur), Math.max(0, left - this.prepLead()));
+  }
+
+  /** "Quick heads-up: your 2 o'clock was just cancelled": the lead host over the ducked music, then the song goes on. */
+  private async breakIn(h: HeadsUp): Promise<void> {
+    const station = this.station;
+    if (!station || !claim(h.id)) return;
+    try {
+      const host = (await loadLineup(station))[0];
+      if (!host) return;
+      const ahead = this.headsUpLines.get(h.id);
+      const text = ahead?.text ?? h.say ?? scriptedSay(h, Date.now());
+      const clip = await (ahead?.clip ?? speak(host, text, { timeoutMs: 15_000 })).catch(() => speak(deviceStandIn(host), text));
+      // paused meanwhile: it waits for the music
+      if (!this.isPlaying() || station !== this.station) return;
+      const b: PreparedBreak = {
+        station,
+        hosts: [host],
+        plan: { kind: 'headsup', topics: ['headsUp'], items: [{ segment: 'headsUp', key: `headsup:${h.id}` }], lines: 1, outro: false, intro: false, mix: 0 },
+        packet: {} as PreparedBreak['packet'],
+        lines: [{ hostId: host.id, text }],
+        clips: [clip],
+        mode: 'builtin',
+        tookMs: 0,
+      };
+      await this.air(b, this.anyAppMode ? 'anyapp' : 'over');
+    } finally {
+      release(h.id);
+    }
+  }
+
+  /** Heads-ups that came in after this break was written go first in it, said by the lead host. */
+  private async addHeadsUpLines(b: PreparedBreak): Promise<void> {
+    if (b.plan.kind === 'callin' || b.plan.kind === 'headsup') return;
+    const planned = new Set(b.plan.items.map((i) => i.key));
+    const seg = b.station.segments;
+    const waiting = (await pendingHeadsUps().catch(() => [])).filter((h) => !planned.has(`headsup:${h.id}`) && (h.mailId ? seg.email : seg.calendar)).slice(0, 2);
+    const lead = b.hosts[0];
+    if (!waiting.length || !lead) return;
+    const now = Date.now();
+    const add = waiting.map((h) => {
+      const ahead = this.headsUpLines.get(h.id);
+      const text = ahead?.text ?? h.say ?? scriptedSay(h, now);
+      const clip = ahead?.clip ?? speak(lead, text, { timeoutMs: 15_000 }).catch(() => speak(deviceStandIn(lead), text));
+      return { h, text, clip };
+    });
+    const n = add.length;
+    b.lines.unshift(...add.map((a) => ({ hostId: lead.id, text: a.text })));
+    b.clips.unshift(...add.map((a) => a.clip));
+    if (b.timeLine) b.timeLine = { ...b.timeLine, index: b.timeLine.index + n };
+    if (b.relative) b.relative = Object.fromEntries(Object.entries(b.relative).map(([k, v]) => [Number(k) + n, v]));
+    b.plan = { ...b.plan, items: [...add.map((a) => ({ segment: 'headsUp' as const, key: `headsup:${a.h.id}` })), ...b.plan.items] };
+  }
+
   // ------------------------------------------------------------------------------------------------ song requests
 
   /**
@@ -370,6 +560,7 @@ class Radio {
     const query = requestQuery(said);
     if (isMood(query)) return undefined;
     const request = await queueRequest(query, this.current?.id);
+    if (request.found) void noteRequested(request.found);
     const cur = this.current;
     if (request.found && cur && this.pending?.trackId === cur.id) {
       this.pending.controller.abort();
@@ -398,13 +589,16 @@ class Radio {
     request?: SongRequest,
     deadline?: number,
     notion?: NotionWrite,
+    onLookup?: () => void,
+    memory?: MemoryChange,
+    action?: ActionTurn,
   ): Promise<PreparedBreak | undefined> {
     const session = this.session;
     const showPrep = kind === 'callin';
     if (showPrep) this.set({ phase: 'preparing' });
     const timer = setTimeout(() => controller.abort(new Error('The break took too long to write')), PREP_TIMEOUT_MS);
     try {
-      const b = await prepareBreak({ station, kind, callIn, songBefore, songAfter, upcoming, request, notion, deadline, signal: controller.signal, onAir: this.onAirBreak });
+      const b = await prepareBreak({ station, kind, callIn, songBefore, songAfter, upcoming, request, notion, deadline, signal: controller.signal, onAir: this.onAirBreak, onLookup, memory, action });
       if (session === this.session && kind !== 'callin') this.notePrep(b.tookMs);
       return session === this.session && !controller.signal.aborted ? b : undefined;
     } catch (err) {
@@ -420,19 +614,22 @@ class Radio {
   }
 
   /** One break on air at a time. */
-  private air(b: PreparedBreak, mode: AirMode, signal?: AbortSignal): Promise<void> {
+  private air(b: PreparedBreak, mode: AirMode, signal?: AbortSignal, opts: { chime?: boolean } = {}): Promise<void> {
     const run = async () => {
       const session = this.session;
       if (session !== this.session || !this._state.onAir) return;
+      await this.addHeadsUpLines(b).catch(() => undefined);
       this.set({ phase: 'talking', script: b.lines, lineIndex: undefined, notice: undefined, noticeLink: undefined });
-      if (b.plan.kind !== 'callin') this.countBreak(b);
-      else this.coverBreak(b);
+      // a heads-up break-in is not a break: the station's song count goes on
+      if (b.plan.kind === 'callin') this.coverBreak(b);
+      else if (b.plan.kind !== 'headsup') this.countBreak(b);
       const now = Date.now();
+      this.onAirSegments = b.plan.items.map((i) => i.segment);
       this.onAirBreak = { id: `on-air-${now}`, createdAt: now, updatedAt: now, stationId: b.station.id, at: now, lines: b.lines, topics: planTopicKeys(b.plan), songBefore: b.songBefore, songAfter: b.songAfter };
       try {
         await airBreak(b, mode, {
           signal,
-          chime: true,
+          chime: opts.chime !== false,
           onLine: (line: BreakLine, i: number) => {
             if (session !== this.session) return;
             this.set({ speakingHostId: line.hostId, caption: line.text, lineIndex: i });
@@ -442,7 +639,8 @@ class Radio {
         });
         if (session !== this.session || signal?.aborted) return;
         await this.record(b);
-        void maybeNotionRecap(b.station).catch(() => undefined);
+        this.journalBreak(b);
+        if (b.plan.kind !== 'headsup') void maybeNotionRecap(b.station).catch(() => undefined);
       } catch (err) {
         console.warn('[hostcaster] break failed on air', err);
       } finally {
@@ -493,17 +691,50 @@ class Radio {
     this.countBreak(b);
   }
 
+  /** The listener pressed Next while the hosts talked: the journal keeps which segments (patterns: "skips the news"). */
+  private noteSkippedBreak() {
+    if (!this.onAirBreak || this.skipNoted === this.onAirBreak.id) return;
+    this.skipNoted = this.onAirBreak.id;
+    void noteBreak(this.onAirSegments, '', true, this.station?.id);
+  }
+
+  /** What a break covered, for the journal (headlines, events and emails by name). */
+  private journalBreak(b: PreparedBreak) {
+    if (b.plan.kind === 'headsup') {
+      if (b.lines[0]?.text) void noteHeadsUp(b.lines[0].text);
+      return;
+    }
+    const p = b.packet;
+    const names = b.plan.items.flatMap((i) => {
+      if (i.segment === 'calendar') return [p.calendar?.find((e) => `calendar:${e.id}` === i.key)?.title];
+      if (i.segment === 'email') return [p.email?.find((m) => `email:${m.id}` === i.key)?.subject];
+      if (i.segment === 'news') return [p.news?.find((h) => h.id === i.key)?.title];
+      if (i.segment === 'headsUp') return [p.headsUps?.find((h) => `headsup:${h.id}` === i.key)?.fact];
+      return [i.segment === 'time' ? undefined : i.segment];
+    });
+    const gist = names.filter(Boolean).join('; ');
+    void noteBreak(b.plan.items.map((i) => i.segment), gist ? `Covered: ${gist}` : '', false, b.station.id);
+  }
+
   private async record(b: PreparedBreak) {
     const station = b.station;
     const brk: Break = await addBreak({
       stationId: station.id,
       at: Date.now(),
-      lines: b.lines,
+      // a time-only line left out on air (its time was not ready) is not in the log either
+      lines: b.lines.filter((l) => l.text),
       topics: planTopicKeys(b.plan),
       songBefore: b.songBefore,
       songAfter: b.songAfter,
     });
     await markInboxUsed(b.plan.items.filter((i) => i.segment === 'inbox').map((i) => i.key.slice('inbox:'.length)));
+    if (b.packet.tracker?.ids.length) void markListAired(b.packet.tracker.ids, Date.now(), b.packet.tracker.asks).catch(() => undefined);
+    // told on air: never again
+    const told = b.plan.items.filter((i) => i.segment === 'headsUp').map((i) => i.key.slice('headsup:'.length));
+    if (told.length) {
+      await markAired(told, b.plan.kind === 'headsup' ? 'breakin' : 'break', b.lines[0]?.text).catch(() => undefined);
+      told.forEach((id) => this.headsUpLines.delete(id));
+    }
     this.set({ lastBreak: brk });
     this.emitter.emit('break', brk);
   }
@@ -515,4 +746,5 @@ export const radio = new Radio();
 if (typeof window !== 'undefined') {
   const w = window as unknown as { __hostcaster?: Record<string, unknown> };
   w.__hostcaster = { ...(w.__hostcaster ?? {}), radio };
+  w.__hostcaster.agent = { ...((w.__hostcaster.agent as object) ?? {}), prepareBreak };
 }

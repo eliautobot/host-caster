@@ -4,21 +4,14 @@
 import { requireUser } from '../auth/session.js';
 import { HttpError } from '../errors.js';
 import { jsonOf, userRequest } from '../net/http.js';
+import { fromAnthropicContent, fromOpenAIToolCalls, readMessages, readTools, toAnthropicMessages, toAnthropicTools, toOpenAIMessages, toOpenAITools, TOOLS_REFUSED } from '../ai/wire.js';
 import { joinUrl, resolveBrain, upstreamError, upstreamMessage } from './providers.js';
+
+/** The model (or its server) does not take tools: the app asks it the JSON way from then on. */
+export const toolsUnsupported = (name) => new HttpError(400, 'tools_unsupported', `${name || 'This model'} cannot look things up with tools`);
 
 const ANTHROPIC_BASE = 'https://api.anthropic.com';
 const ANTHROPIC_VERSION = '2023-06-01';
-
-function readMessages(body) {
-  const messages = Array.isArray(body?.messages) ? body.messages : [];
-  for (const m of messages) {
-    if (!m || !['user', 'assistant', 'system'].includes(m.role) || typeof m.content !== 'string') {
-      throw new HttpError(400, 'invalid_request', 'messages must be [{ role, content }]');
-    }
-  }
-  if (!messages.length) throw new HttpError(400, 'invalid_request', 'messages is empty');
-  return messages;
-}
 
 const textOf = (content) =>
   typeof content === 'string' ? content : Array.isArray(content) ? content.map((p) => p?.text ?? '').join('') : '';
@@ -41,15 +34,19 @@ async function openaiChat(ctx, brain, req) {
   if (brain.apiKey) headers.authorization = `Bearer ${brain.apiKey}`;
   const body = {
     model: brain.model,
-    messages: [{ role: 'system', content: req.system }, ...req.messages],
+    messages: [{ role: 'system', content: req.system }, ...toOpenAIMessages(req.messages)],
     max_tokens: req.maxTokens,
     stream: false,
   };
+  if (req.tools) {
+    body.tools = toOpenAITools(req.tools);
+    body.tool_choice = 'auto';
+  }
   const temperature = req.temperature ?? brain.temperature;
   if (typeof temperature === 'number') body.temperature = temperature;
   // JSON mode: cloud APIs handle it; local servers loop on it (Ollama + small models: "token repeat limit") or want a
   // json_schema (LM Studio). The prompt asks for JSON and the app's parser is tolerant, so skip it locally.
-  if (req.json && !isLocal(brain)) body.response_format = { type: 'json_object' };
+  if (req.json && !isLocal(brain) && !req.tools) body.response_format = { type: 'json_object' };
   // radio lines need no chain of thought (thinking models on Ollama answer at once)
   if (isOllama(brain)) body.reasoning_effort = 'none';
 
@@ -63,6 +60,8 @@ async function openaiChat(ctx, brain, req) {
       const choice = j?.choices?.[0];
       if (!choice) throw new HttpError(502, 'upstream_error', 'The model returned no choices');
       const text = stripThinking(textOf(choice.message?.content));
+      const toolCalls = req.tools ? fromOpenAIToolCalls(choice.message) : [];
+      if (toolCalls.length) return { text, toolCalls, model: j.model ?? brain.model, usage: j.usage };
       const thought = Boolean(choice.message?.reasoning || choice.message?.reasoning_content);
       // a thinking model that spent the whole budget thinking: once more with room for the answer
       if (!text && thought && choice.finish_reason === 'length' && !roomy) {
@@ -79,6 +78,7 @@ async function openaiChat(ctx, brain, req) {
     }
     const msg = upstreamMessage(res, '').toLowerCase();
     const named = res.status === 400 || res.status === 422;
+    if (req.tools && (named || res.status === 404 || res.status === 500) && TOOLS_REFUSED.test(msg)) throw toolsUnsupported(brain.name);
     if (named && msg.includes('max_tokens') && body.max_tokens !== undefined) {
       body.max_completion_tokens = body.max_tokens;
       delete body.max_tokens;
@@ -97,13 +97,13 @@ async function openaiChat(ctx, brain, req) {
 
 async function anthropicChat(ctx, brain, req) {
   if (!brain.apiKey) throw new HttpError(400, 'missing_key', 'Add your Anthropic API key first');
-  const messages = req.messages.filter((m) => m.role !== 'system');
-  if (messages[0]?.role !== 'user') messages.unshift({ role: 'user', content: 'Go ahead.' });
+  const messages = toAnthropicMessages(req.messages);
   const extraSystem = req.messages.filter((m) => m.role === 'system').map((m) => m.content);
-  const system = [req.system, ...extraSystem, req.json ? 'Reply with one JSON object only, no prose, no code fences.' : '']
+  const system = [req.system, ...extraSystem, req.json && !req.tools ? 'Reply with one JSON object only, no prose, no code fences.' : '']
     .filter(Boolean)
     .join('\n\n');
   const body = { model: brain.model, max_tokens: req.maxTokens, system, messages };
+  if (req.tools) body.tools = toAnthropicTools(req.tools);
   const temperature = req.temperature ?? brain.temperature;
   if (typeof temperature === 'number') body.temperature = Math.min(1, temperature);
   const res = await userRequest(ctx, `${anthropicBase(brain)}/v1/messages`, {
@@ -112,10 +112,13 @@ async function anthropicChat(ctx, brain, req) {
     body: JSON.stringify(body),
     timeoutMs: 90000,
   });
-  if (res.status < 200 || res.status >= 300) throw upstreamError(res, brain.name || 'Claude');
+  if (res.status < 200 || res.status >= 300) {
+    if (req.tools && res.status === 400 && TOOLS_REFUSED.test(upstreamMessage(res, ''))) throw toolsUnsupported(brain.name);
+    throw upstreamError(res, brain.name || 'Claude');
+  }
   const j = jsonOf(res);
-  const text = (j?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-  return { text, model: j?.model ?? brain.model, usage: j?.usage };
+  const { text, toolCalls } = fromAnthropicContent(j?.content);
+  return { text, ...(toolCalls.length ? { toolCalls } : {}), model: j?.model ?? brain.model, usage: j?.usage };
 }
 
 async function listModels(ctx, brain) {
@@ -147,6 +150,7 @@ export async function aiRoutes(app) {
         model: brain.model,
         system: String(req.body?.system ?? ''),
         messages: readMessages(req.body),
+        tools: readTools(req.body),
         json: req.body?.json === true,
         force: req.body?.force === true,
       });
@@ -157,6 +161,7 @@ export async function aiRoutes(app) {
       return app.included.chat(user.id, {
         system: String(req.body?.system ?? ''),
         messages: readMessages(req.body),
+        tools: readTools(req.body),
         json: req.body?.json === true,
         maxTokens: Math.max(1, Math.min(2048, Number(req.body?.maxTokens ?? 600))),
         temperature: typeof req.body?.temperature === 'number' ? req.body.temperature : undefined,
@@ -171,6 +176,7 @@ export async function aiRoutes(app) {
     const chatReq = {
       system: String(req.body?.system ?? ''),
       messages: readMessages(req.body),
+      tools: readTools(req.body),
       json: req.body?.json === true,
       maxTokens,
       temperature: typeof req.body?.temperature === 'number' ? req.body.temperature : undefined,

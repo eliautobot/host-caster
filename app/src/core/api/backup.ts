@@ -12,7 +12,7 @@ import type { BlobRecord, Brain, VoiceProvider } from '../types';
 
 export const BACKUP_FORMAT = 'hostcaster-backup';
 const VERSION = 1;
-const TABLES = ['hosts', 'stations', 'brains', 'voices', 'playlists', 'tracks', 'breaks', 'profile', 'settings', 'kv'] as const;
+const TABLES = ['hosts', 'stations', 'brains', 'voices', 'playlists', 'tracks', 'breaks', 'profile', 'settings', 'kv', 'memories', 'journal', 'tracker'] as const;
 type TableName = (typeof TABLES)[number];
 /** kv rows that belong to this device's session, never to a backup */
 const PRIVATE_KV = /^(api:session|sync:|auth:)/;

@@ -2,13 +2,17 @@
 // talkEvery, talkLength and the talk mix (music <-> the listener's day). Day first: every regular break carries one
 // item from the listener's day when there is one, and the first break of a session and of each hour is a short
 // rundown of the day. Pure and deterministic given `rand`, so it is easy to test.
+import type { FollowUp } from '../agent/followup';
 import type { NotionWrite } from './notionAsk';
+import type { MemoryChange } from '../memory/commands';
+import type { ActionTurn } from '../actions/callin';
 import type { SongRequest } from './requests';
 import type { Break, ContextPacket, SegmentKey, Station } from '../types';
 import { FUN_FACTS } from './facts';
 
-export type BreakKind = 'regular' | 'opening' | 'callin' | 'stream';
-export type TopicKey = SegmentKey | 'inbox';
+/** headsup = a short break-in over the music for something urgent that just changed (core/agent/headsup.ts) */
+export type BreakKind = 'regular' | 'opening' | 'callin' | 'stream' | 'headsup';
+export type TopicKey = SegmentKey | 'inbox' | 'headsUp';
 
 export interface PlannedTopic {
   segment: TopicKey;
@@ -39,6 +43,12 @@ export interface BreakPlan {
   requestFrom?: 'call' | 'app';
   /** something the listener (or their AI app) asked to add to Notion, already done or not */
   notion?: NotionWrite;
+  /** the answer to a call-in question about something the hosts said (core/agent/followup.ts) */
+  followUp?: FollowUp;
+  /** "remember that ..." / "forget that ...", already done: the hosts confirm it (core/memory/commands.ts) */
+  memory?: MemoryChange;
+  /** Your list / an action the listener asked for (core/actions/callin.ts): its exact line closes the break */
+  action?: ActionTurn;
 }
 
 export const TALK_LENGTH_LINES = { short: [1, 2], normal: [3, 4], long: [5, 8] } as const;
@@ -77,6 +87,7 @@ export const SEGMENT_COOLDOWN: Record<TopicKey, number> = {
   reminders: 10 * MIN,
   funFacts: 20 * MIN,
   inbox: 0,
+  headsUp: 0,
 };
 /** the same item (one calendar event, one headline) rests this long */
 export const ITEM_COOLDOWN: Partial<Record<TopicKey, number>> = {
@@ -260,6 +271,9 @@ export interface PlanOptions {
   request?: SongRequest;
   requestFrom?: 'call' | 'app';
   notion?: NotionWrite;
+  followUp?: FollowUp;
+  memory?: MemoryChange;
+  action?: ActionTurn;
   hostCount?: number;
   now?: number;
   rand?: () => number;
@@ -277,12 +291,15 @@ export function planBreak(station: Station, packet: ContextPacket, recent: Break
 
   // the rundown: only when there is something to run down (a lone time check is a regular break)
   const rundownList = rundownDue(kind, recent, now) ? rundownItems(station, packet, recent, now, RUNDOWN_ITEMS[len], len === 'short' ? 1 : 2) : [];
+  // the listener's patterns play some things down right now ("Skips the news before 9 AM")
+  const quiet = new Set(packet.memory?.quieter ?? []);
+  if (quiet.size) for (let i = rundownList.length - 1; i >= 0; i--) if (quiet.has(rundownList[i]!.segment)) rundownList.splice(i, 1);
   const rundown = rundownList.some((i) => i.segment !== 'time');
 
   let items: PlannedTopic[];
   if (rundown) items = rundownList;
   else {
-    const bias = (c: Candidate) => (DAY_SEGMENTS.has(c.segment) ? DAY_BIAS[mix]! : 0);
+    const bias = (c: Candidate) => (DAY_SEGMENTS.has(c.segment) ? DAY_BIAS[mix]! : 0) - (quiet.has(c.segment) ? 60 : 0);
     const pool = candidates(station, packet, recent, now).map((c) => ({ ...c, score: c.score + bias(c) + rand() * 10 }));
     if (kind === 'opening') {
       for (const c of pool) if (c.segment === 'time' || c.segment === 'weather') c.score += 60;
@@ -293,15 +310,16 @@ export function planBreak(station: Station, packet: ContextPacket, recent: Break
     // that aired a few minutes ago may come back with another item (a different headline, the next event)
     if (want > 0 && mix > 0 && kind !== 'callin') {
       const day =
-        pool.find((c) => DAY_SEGMENTS.has(c.segment)) ??
+        pool.find((c) => DAY_SEGMENTS.has(c.segment) && !quiet.has(c.segment)) ??
         candidates(station, packet, recent, now, { rest: 0.5 })
-          .filter((c) => DAY_SEGMENTS.has(c.segment))
+          .filter((c) => DAY_SEGMENTS.has(c.segment) && !quiet.has(c.segment))
           .map((c) => ({ ...c, score: c.score + rand() * 10 }))
           .sort((a, b) => b.score - a.score)[0];
       if (day) chosen.push(day);
     }
     for (const c of pool) {
       if (chosen.length >= want) break;
+      if (quiet.has(c.segment)) continue;
       if (!chosen.some((x) => x.key === c.key || x.segment === c.segment)) chosen.push(c);
     }
     // airing order: most pressing first
@@ -310,8 +328,12 @@ export function planBreak(station: Station, packet: ContextPacket, recent: Break
       .map((i) => (i.segment === 'funFacts' ? { segment: i.segment, key: pickFact(recent, rand) } : { segment: i.segment, key: i.key }));
   }
 
+  // heads-ups waiting for this break (something important just changed) go first, ahead of everything else
+  const heads = kind === 'callin' || kind === 'headsup' ? [] : (packet.headsUps ?? []).slice(0, 2);
+  if (heads.length) items = [...heads.map((h) => ({ segment: 'headsUp' as const, key: `headsup:${h.id}` })), ...items.filter((i) => i.segment !== 'headsUp')];
+
   const [lo, hi] = rundown ? RUNDOWN_LINES[len] : TALK_LENGTH_LINES[len];
-  let lines = lo + Math.floor(rand() * (hi - lo + 1));
+  let lines = lo + Math.floor(rand() * (hi - lo + 1)) + heads.length;
   if (hosts > 1) lines = Math.max(lines, 2);
   if (kind === 'opening' && !rundown && len !== 'short') lines = Math.min(hi, lines + 1);
 
@@ -330,6 +352,9 @@ export function planBreak(station: Station, packet: ContextPacket, recent: Break
     request: opts.request,
     requestFrom: opts.request ? (opts.requestFrom ?? (kind === 'callin' ? 'call' : 'app')) : undefined,
     ...(opts.notion ? { notion: opts.notion } : {}),
+    ...(opts.followUp ? { followUp: opts.followUp } : {}),
+    ...(opts.memory ? { memory: opts.memory } : {}),
+    ...(opts.action ? { action: opts.action } : {}),
   };
 }
 

@@ -49,10 +49,37 @@ test('gmail: unread, important first then newest, promotions last', async (t) =>
   const { messages, unread } = res.json();
   assert.equal(unread, 3);
   assert.deepEqual(messages.map((m) => m.id), ['m2', 'm3', 'm1']);
-  assert.deepEqual(Object.keys(messages[0]).sort(), ['at', 'from', 'id', 'important', 'snippet', 'subject']);
+  assert.deepEqual(Object.keys(messages[0]).sort(), ['address', 'at', 'from', 'id', 'important', 'snippet', 'source', 'subject']);
   assert.equal(messages[0].from, 'Sender m2');
+  assert.equal(messages[0].address, 'm2@mail.test');
   assert.equal(messages[0].important, true);
   assert.equal(messages[0].snippet, 'Snippet & m2');
+});
+
+test('watch: changed events (cancelled and declined ones by id) and new inbox mail since a history id', async (t) => {
+  const { get } = await googleUser(t, ['calendar', 'gmail']);
+  const first = await get(`/api/google/watch?since=${Date.now() - 600_000}`);
+  assert.equal(first.statusCode, 200, first.body);
+  const w = first.json();
+  assert.equal(w.gmail.historyId, '100');
+  assert.deepEqual(w.gmail.messages, []);
+  const byId = Object.fromEntries(w.calendar.changed.map((e) => [e.id.split(':').pop(), e]));
+  assert.equal(byId.e1.title, 'Dentist');
+  assert.equal(byId.e2.cancelled, true);
+  assert.equal(byId.e3.cancelled, true);
+  assert.equal(byId.e3.declinedByMe, true);
+  const next = (await get('/api/google/watch?historyId=100')).json();
+  assert.equal(next.gmail.historyId, '105');
+  // the sent message is not inbox mail; the promotion is marked bulk
+  assert.deepEqual(next.gmail.messages.map((m) => [m.id, m.bulk]), [['m1', true], ['m2', false]]);
+  assert.equal(next.gmail.messages[1].gmailImportant, true);
+  assert.equal(next.gmail.messages[1].address, 'm2@mail.test');
+  // a history id Google no longer knows starts over from now
+  assert.equal((await get('/api/google/watch?historyId=10')).json().gmail.historyId, '100');
+  // no Gmail access: only the calendar part
+  const cal = await googleUser(t, ['calendar']);
+  const only = (await cal.get('/api/google/watch')).json();
+  assert.ok(only.calendar && !only.gmail);
 });
 
 test('youtube: playlists incl. liked, items with durations and embeddable, search', async (t) => {
@@ -177,6 +204,7 @@ test('IMAP: test, save sealed creds (pinned to the validated address), summary, 
   const sum = (await call('GET', '/api/imap/summary?max=5')).json();
   assert.equal(sum.unread, 3);
   assert.deepEqual(sum.messages.map((m) => [m.from, m.subject, m.important]), [['Boss', 'Report', true], ['news@w.test', 'News', false]]);
+  assert.deepEqual(sum.messages.map((m) => m.address), ['boss@w.test', 'news@w.test'], 'the sender address (new sender check)');
   const priv = await call('POST', '/api/imap/test', { ...creds, host: 'intranet.test' });
   assert.equal(priv.json().error.code, 'blocked_address');
   assert.equal((await call('DELETE', '/api/imap')).statusCode, 204);

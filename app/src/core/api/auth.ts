@@ -7,7 +7,7 @@ import type { ApiSession, ApiUser, SignInProvider } from '../types';
 import { createEmitter } from '../util/emitter';
 import { api, ApiError, request } from './client';
 
-export type GoogleService = 'calendar' | 'gmail' | 'youtube';
+export type GoogleService = 'calendar' | 'gmail' | 'youtube' | 'calendarEvents' | 'tasks';
 type OAuthProvider = Exclude<SignInProvider, 'local'>;
 
 const SESSION_KEY = 'api:session';

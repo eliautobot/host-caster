@@ -5,8 +5,11 @@ import type { BreakLine, ContextPacket, Host, PartOfDay, Station } from '../type
 import * as B from './builtinLines';
 import { FUN_FACTS } from './facts';
 import { notionSpoken } from './notionAsk';
+import { memorySpoken } from '../memory/commands';
 import { factFor, noteKey, requestIsNext, type BreakPlan } from './planner';
-import { emailSpoken, eventSpoken, greetingFor, PART_OF_DAY_WORDS, fitsPartOfDay, spokenTime, whenSpoken } from './speakable';
+import { emailSpoken, eventSpoken, greetingFor, PART_OF_DAY_WORDS, fitsPartOfDay, whenSpoken } from './speakable';
+import { TIME_SLOT } from './airtime';
+import { scriptedSay } from '../agent/changes';
 
 type Vars = Record<string, string | number | undefined>;
 
@@ -92,7 +95,12 @@ function topicBeat(c: Composer, item: BreakPlan['items'][number], plan: BreakPla
   const t = (text: string): Beat => ({ kind: 'topic', text });
   switch (item.segment) {
     case 'time':
-      return t(c.pick(B.TIME, { time: spokenTime(now), weekday: packet.now.weekday, part: PART_OF_DAY_WORDS[packet.now.partOfDay] }));
+      // the time-teller's words: the real time goes in when the break starts (core/radio/airtime.ts)
+      return t(c.pick(B.TIME, { time: TIME_SLOT, weekday: packet.now.weekday, part: PART_OF_DAY_WORDS[packet.now.partOfDay] }));
+    case 'headsUp': {
+      const h = packet.headsUps?.find((x) => `headsup:${x.id}` === item.key);
+      return h ? t(h.say ?? scriptedSay(h, now)) : undefined;
+    }
     case 'weather': {
       const w = packet.weather;
       if (!w) return undefined;
@@ -104,7 +112,16 @@ function topicBeat(c: Composer, item: BreakPlan['items'][number], plan: BreakPla
     }
     case 'calendar': {
       const e = packet.calendar?.find((x) => `calendar:${x.id}` === item.key);
-      return e ? t(c.pick(B.CALENDAR, { event: eventSpoken(e, now) })) : undefined;
+      if (!e) return undefined;
+      // "with Dana Reyes and Mike Chen", "it's about the vendor numbers": the details the scripted hosts can say
+      const people = (e.attendees ?? []).filter((a) => !a.self && a.status !== 'declined').map((a) => a.name).slice(0, 3);
+      const about = packet.dossiers?.find((d) => d.key === item.key)?.about;
+      const extra = [
+        people.length ? `It's with ${people.length > 1 ? `${people.slice(0, -1).join(', ')} and ${people.at(-1)}` : people[0]}.` : '',
+        e.invitation ? `${e.organizer ?? 'Someone'} sent the invite and you haven't answered yet.` : '',
+        about && about.length < 160 && !plan.rundown ? about : '',
+      ].filter(Boolean);
+      return t([c.pick(B.CALENDAR, { event: eventSpoken(e, now) }), ...extra].join(' '));
     }
     case 'email': {
       const m = packet.email?.find((x) => `email:${x.id}` === item.key);
@@ -138,6 +155,8 @@ function topicBeat(c: Composer, item: BreakPlan['items'][number], plan: BreakPla
     }
     case 'inbox': {
       const i = packet.inbox?.find((x) => `inbox:${x.id}` === item.key);
+      const a = i && packet.inboxAnswers?.[i.id];
+      if (i && a) return t(`Your assistant asked: ${i.text.replace(/\s+/g, ' ').trim()} ${a.answer}`);
       return i ? t(i.kind === 'segment' ? i.text : c.pick(B.NOTE, { note: i.text.replace(/[.!?]+$/, '') })) : undefined;
     }
     default:
@@ -169,9 +188,18 @@ export function writeBuiltinBreak(
     let text = c.pick(B.OPENING, vars);
     if (hosts.length > 1) text += ` ${c.pick(B.OPENING_DUO, vars)}`;
     beats.push({ kind: 'opening', text });
+    // what the listener told the hosts: the plan coming up soonest
+    if (packet.memory?.soon) beats.push({ kind: 'opening', text: `And from what you told me: ${packet.memory.soon}.` });
   }
-  if (plan.callIn) beats.push(...callInBeats(c, plan.request || plan.notion ? '' : plan.callIn, packet, now));
+  if (plan.callIn && plan.followUp) {
+    // a question about something the hosts said: the answer, from the items' own fields and dossiers
+    const listener = packet.listener.callMe || packet.listener.name.split(' ')[0] || '';
+    beats.push({ kind: 'callin', text: listener ? c.pick(B.CALLIN_OPEN, { listener }) : c.pick(B.CALLIN_OPEN_ANON, {}) }, { kind: 'callin', text: plan.followUp.answer });
+  } else if (plan.callIn) beats.push(...callInBeats(c, plan.request || plan.notion || plan.memory || plan.action ? '' : plan.callIn, packet, now));
   if (plan.notion) beats.push({ kind: 'callin', text: notionSpoken(plan.notion, (bank, vars) => c.pick(bank, vars), plan.kind) });
+  if (plan.memory) beats.push({ kind: 'callin', text: memorySpoken(plan.memory) });
+  // Your list: a reminder, a follow-up or what is due (the scripted fallback says it plainly)
+  for (const text of packet.tracker?.spoken ?? []) beats.push({ kind: 'callin', text });
   if (plan.request) {
     const r = plan.request;
     const from = plan.requestFrom === 'app' ? B.REQUEST_APP_LEAD : B.REQUEST_LEAD;
@@ -190,15 +218,24 @@ export function writeBuiltinBreak(
     const bank = lead.energy >= 4 && c.chance(0.4) ? B.OUTRO_HIGH : lead.energy <= 2 && c.chance(0.5) ? B.OUTRO_LOW : B.OUTRO;
     beats.push({ kind: 'outro', text: c.pick(bank, songVars(packet.songBefore)) });
   }
+  let timeCheck: Beat | undefined;
+  let heads = 0;
   for (const item of plan.items) {
     const b = topicBeat(c, item, plan, packet, now);
-    if (b) beats.push(b);
+    if (b && item.segment === 'time') timeCheck = b;
+    // a heads-up opens the break (after the welcome of the first one)
+    else if (b && item.segment === 'headsUp') beats.splice((plan.kind === 'opening' ? Math.min(1, beats.length) : 0) + heads++, 0, b);
+    else if (b) beats.push(b);
   }
   if (plan.intro && packet.songAfter) {
     const closer = hosts[beats.length % hosts.length] ?? lead;
     const bank = closer.energy >= 4 && c.chance(0.4) ? B.INTRO_HIGH : closer.energy <= 2 && c.chance(0.5) ? B.INTRO_LOW : B.INTRO;
     beats.push({ kind: 'intro', text: c.pick(bank, songVars(packet.songAfter)) });
   } else if (plan.kind === 'callin' && !plan.request?.found) beats.push({ kind: 'filler', text: c.pick(B.CALLIN_THANKS, {}) });
+  // the time check is said last, by whoever closes, just before the hand-off to the song
+  const closing = beats.at(-1);
+  if (timeCheck && closing && (closing.kind === 'intro' || closing.kind === 'filler')) closing.text = `${timeCheck.text} ${closing.text}`;
+  else if (timeCheck) beats.push(timeCheck);
   if (!beats.length) beats.push({ kind: 'filler', text: c.pick(B.STATION_ID, vars) });
 
   return assign(c, beats, hosts, plan.lines, packet.now.partOfDay);

@@ -1,10 +1,16 @@
 // Prompts for AI hosts. The radio voice: short spoken sentences, facts only from the packet, natural song intros
 // and outros, hosts talking to each other, persona + avoid list, no repeats of recent breaks.
 import type { BreakLine, ContextPacket, Host, Station, TalkLength } from '../types';
+import { emailDetailFacts, eventDetailFacts, newsDetailFacts } from '../agent/brief';
 import { lifeEventInfo } from '../context/life';
 import { notionFact, notionTask } from './notionAsk';
+import { memoryFact, memoryTask } from '../memory/commands';
+import { actionFact, actionTask } from '../actions/callin';
+import { MEMORY_RULE, memorySheet } from '../memory/brief';
+import { LIST_RULE, listSheet } from '../tracker/brief';
 import { DAY_SEGMENTS, factFor, noteKey, requestIsNext, type BreakPlan } from './planner';
-import { clockTime, emailSpoken, eventSpoken, fitsPartOfDay, PART_OF_DAY_WORDS, spokenTime, weatherSpoken, whenSpoken } from './speakable';
+import { emailSpoken, eventSpoken, fitsPartOfDay, PART_OF_DAY_WORDS, weatherSpoken, whenSpoken } from './speakable';
+import { TIME_SLOT } from './airtime';
 
 const LEVEL = ['very low', 'low', 'medium', 'high', 'very high'];
 const VERBOSE = ['one short sentence', 'one or two short sentences', 'two short sentences', 'two or three sentences', 'up to three sentences'];
@@ -31,7 +37,7 @@ export function hostCard(h: Host, role: 'lead' | 'co-host'): string {
   return '- ' + bits.filter(Boolean).join(' ');
 }
 
-const PERSONAL = new Set(['calendar', 'reminders', 'email', 'notes', 'lifeEvents', 'inbox']);
+const PERSONAL = new Set(['calendar', 'reminders', 'email', 'notes', 'lifeEvents', 'inbox', 'headsUp']);
 
 /** How much the songs get at each talk mix step (core/radio/planner.ts). */
 const MIX_SONGS = [
@@ -48,14 +54,24 @@ const RULES = (packet: ContextPacket, words: number, plan?: BreakPlan) =>
     'No markdown, no emojis, no lists, no hashtags, no stage directions, no sound effects, no (laughs) or *actions*.',
     'Use only the facts in FACTS. Never invent times, dates, weather, events, messages, headlines, chart positions or song trivia. If something is not in FACTS, do not mention it.',
     plan && !plan.items.some((i) => PERSONAL.has(i.segment))
-      ? 'FACTS has nothing about the listener\'s plans: do not mention reminders, appointments, plans, messages, family or anything else in their life.'
+      ? packet.memory?.facts.length
+        ? 'Apart from WHAT YOU KNOW ABOUT THE LISTENER, FACTS has nothing about the listener\'s plans: do not invent reminders, appointments, plans, messages or family.'
+        : 'FACTS has nothing about the listener\'s plans: do not mention reminders, appointments, plans, messages, family or anything else in their life.'
       : '',
-    'Say numbers the way a person would, in words. Say the time at most once and only with the SAY THE TIME AS wording from FACTS; never guess or round a time.',
+    packet.memory?.facts.length || packet.memory?.recently.length ? MEMORY_RULE : '',
+    packet.tracker?.lines.length ? LIST_RULE : '',
+    'Say numbers the way a person would, in words.',
+    plan?.items.some((i) => i.segment === 'time')
+      ? `Never say the clock time yourself: only the last line says it, written exactly as ${TIME_SLOT} (the real time is put in on air). Times of events and reminders from FACTS are fine.`
+      : 'Never say what time it is now (times of events and reminders from FACTS are fine).',
     plan?.items.some((i) => PERSONAL.has(i.segment))
       ? "The calendar, reminders, email and notes in FACTS belong to the listener, not to the hosts: tell the listener about them (\"you have...\")."
       : '',
     'Name songs only with the exact titles and artists in JUST PLAYED, UP NEXT or PLAYING NOW. Never name any other song or artist.',
     'Email: say only who it is from and the gist in a few words. Never read addresses, numbers, codes or private details.',
+    plan?.items.some((i) => i.segment === 'calendar' || i.segment === 'email')
+      ? 'WHAT IT IS ABOUT, WHO, ALSO, TO PREPARE and RELATED EMAIL are true details: work in the one or two that matter most, in your own words. Never read out links, addresses or codes.'
+      : '',
     'When there are two or more hosts, they talk to each other by name, react to what was just said and hand off naturally, like a real morning show.',
     `Talk to one listener${packet.listener.callMe ? `, ${packet.listener.callMe}` : ''}, warmly. Use their name at most once per break.`,
     'Do not repeat lines, jokes or openers from RECENT BREAKS, and never take facts from them: their times are out of date. Facts come only from FACTS. Sound fresh every time.',
@@ -67,19 +83,33 @@ const RULES = (packet: ContextPacket, words: number, plan?: BreakPlan) =>
     .map((r) => `- ${r}`)
     .join('\n');
 
+const dossierOf = (packet: ContextPacket, key: string) => packet.dossiers?.find((d) => d.key === key);
+
 function topicFacts(plan: BreakPlan, packet: ContextPacket, now: number): string[] {
   const out: string[] = [];
   for (const item of plan.items) {
     switch (item.segment) {
       case 'time':
-        out.push(`TIME: tell the listener the time (${q(spokenTime(now))}) and that it is ${packet.now.weekday} ${PART_OF_DAY_WORDS[packet.now.partOfDay]}.`);
+        out.push(
+          `TIME CHECK: the LAST line of the break gives the time, written exactly as ${TIME_SLOT} (the real time is put in on air), in that host's own words, e.g. "It's ${TIME_SLOT} on this ${packet.now.weekday} ${PART_OF_DAY_WORDS[packet.now.partOfDay]}"${plan.intro ? ', then the hand-off to the next song' : ''}. ${TIME_SLOT} appears once in the whole break; no other line mentions the clock time.`,
+        );
         break;
+      case 'headsUp': {
+        const h = packet.headsUps?.find((x) => `headsup:${x.id}` === item.key);
+        if (h)
+          out.push(
+            `HEADS-UP (it just changed: open the break with it, plainly, like "Quick heads-up: ..."): ${h.fact}${h.start && h.kind !== 'cancelled' ? ` It starts ${whenSpoken(h.start, now)}.` : ''}${h.note && !h.note.startsWith(h.fact) ? ` What the hosts found out: ${h.note}` : ''}`,
+          );
+        break;
+      }
       case 'weather':
         if (packet.weather) out.push(`WEATHER: ${weatherSpoken(packet.weather)}.`);
         break;
       case 'calendar': {
         const e = packet.calendar?.find((x) => `calendar:${x.id}` === item.key);
         if (e) out.push(`CALENDAR: ${eventSpoken(e, now)}${e.location ? ` (at ${e.location})` : ''}.`);
+        // what it is about and who is in it (a rundown keeps to one detail line per event)
+        if (e) out.push(...eventDetailFacts(e, packet.email, dossierOf(packet, item.key)).slice(0, plan.rundown ? 1 : 4));
         if (plan.rundown || item !== plan.items.find((i) => i.segment === 'calendar')) break;
         const more = (packet.calendar ?? []).filter((x) => x !== e).slice(0, 2);
         if (more.length) out.push(`ALSO ON THE CALENDAR (only if it fits): ${more.map((x) => eventSpoken(x, now)).join('; ')}.`);
@@ -87,12 +117,13 @@ function topicFacts(plan: BreakPlan, packet: ContextPacket, now: number): string
       }
       case 'email': {
         const m = packet.email?.find((x) => `email:${x.id}` === item.key);
-        if (m) out.push(`EMAIL: ${emailSpoken(m)}${m.important ? ' (marked important)' : ''}.`);
+        if (m) out.push(`EMAIL: ${emailSpoken(m)}${m.important ? ' (marked important)' : ''}.`, ...emailDetailFacts(m, dossierOf(packet, item.key)).slice(0, plan.rundown ? 1 : 3));
         break;
       }
       case 'news': {
         const h = packet.news?.find((x) => x.id === item.key);
-        if (h) out.push(`NEWS HEADLINE from ${h.source}: ${q(h.title)}. Mention it in one or two sentences; do not add details.`);
+        const more = h ? newsDetailFacts(dossierOf(packet, item.key)) : [];
+        if (h) out.push(`NEWS HEADLINE from ${h.source}: ${q(h.title)}. Mention it in one or two sentences; ${more.length ? 'add only details from WHAT THE ARTICLE SAYS' : 'do not add details'}.`, ...more.slice(0, plan.rundown ? 0 : 1));
         break;
       }
       case 'lifeEvents': {
@@ -121,7 +152,9 @@ function topicFacts(plan: BreakPlan, packet: ContextPacket, now: number): string
       }
       case 'inbox': {
         const i = packet.inbox?.find((x) => `inbox:${x.id}` === item.key);
-        if (i) out.push(i.kind === 'segment' ? `SEGMENT to air${i.hostName ? ` (by ${i.hostName})` : ''}: ${i.text}` : `NOTE from the listener's AI assistant: ${i.text}`);
+        const a = i && packet.inboxAnswers?.[i.id];
+        if (i && a) out.push(`QUESTION from the listener's AI assistant: ${q(i.text)}. ANSWER (${a.found ? 'checked in their own data and lookups' : 'looked for, not found'}): ${a.answer} Tell the listener the answer plainly; add nothing that is not in it.`);
+        else if (i) out.push(i.kind === 'segment' ? `SEGMENT to air${i.hostName ? ` (by ${i.hostName})` : ''}: ${i.text}` : `NOTE from the listener's AI assistant: ${i.text}`);
         break;
       }
       default:
@@ -142,7 +175,7 @@ export function factsSheet(plan: BreakPlan, packet: ContextPacket, station: Stat
   const L = packet.listener;
   const lines = [
     `STATION: ${station.name}, ${station.frequency} FM.`,
-    `NOW: ${packet.now.weekday} ${PART_OF_DAY_WORDS[packet.now.partOfDay]}, ${clockTime(now)}. SAY THE TIME AS: ${q(spokenTime(now))}.`,
+    `NOW: ${packet.now.weekday} ${PART_OF_DAY_WORDS[packet.now.partOfDay]}.`,
     L.callMe || L.about || L.interests.length
       ? `LISTENER: ${[L.callMe && `call them ${L.callMe}`, L.about, L.interests.length && `Interests: ${L.interests.join(', ')}`].filter(Boolean).join('. ')}.`
       : '',
@@ -155,7 +188,14 @@ export function factsSheet(plan: BreakPlan, packet: ContextPacket, station: Stat
         ? `SONG REQUEST ${plan.requestFrom === 'app' ? "from the listener's AI assistant" : 'from the listener'}: ${q(plan.request.query)}. It is NOT in their music library, so it cannot play. Say so kindly; they can add it to their library.`
         : '',
     notionFact(plan),
+    memoryFact(plan.memory),
+    actionFact(plan.action),
+    plan.followUp
+      ? `ANSWER TO THE LISTENER'S QUESTION (${plan.followUp.found ? 'checked in their own calendar, email, notes and lookups' : 'it was looked for and not found'}): ${plan.followUp.answer}`
+      : '',
     ...topicFacts(plan, packet, now),
+    memorySheet(packet.memory),
+    listSheet(packet.tracker),
   ];
   return lines.filter(Boolean).join('\n');
 }
@@ -200,26 +240,35 @@ function task(plan: BreakPlan, hosts: Host[], packet: ContextPacket): string {
   const found = plan.request?.found;
   const next = requestIsNext(plan, packet);
   if (plan.kind === 'opening') parts.push('This is the first break of the show: welcome the listener and say the station name once.');
+  if (plan.items.some((i) => i.segment === 'headsUp')) parts.push('Open the break with the HEADS-UP, before anything else (even before the song that just played).');
   if (plan.rundown) {
     parts.push(
-      `${plan.kind === 'opening' ? 'Then give' : 'This is the top-of-the-hour rundown: give'} a quick rundown of the listener's day from FACTS, in this order: ${plan.items.map((i) => i.segment).join(', ')}. One short sentence per item, soonest first.`,
+      `${plan.kind === 'opening' ? 'Then give' : 'This is the top-of-the-hour rundown: give'} a quick rundown of the listener's day from FACTS, in this order: ${plan.items.filter((i) => i.segment !== 'time' && i.segment !== 'headsUp').map((i) => i.segment).join(', ')}. One short sentence per item, soonest first.`,
     );
   }
   if (plan.callIn) {
     const answer = found ? (next ? ' Say yes to their request, but keep its name for the last line.' : ' Say yes and name their song, once.') : '';
-    parts.push(`The listener just called in and said: ${q(plan.callIn)}. Answer them on air first, warmly and directly.${answer} If they ask for something you cannot do, say so kindly.`);
+    parts.push(
+      plan.followUp
+        ? `The listener just called in and asked: ${q(plan.callIn)}. Answer them on air first with ANSWER TO THE LISTENER'S QUESTION: plainly and completely, in your own words, adding nothing that is not in it.${plan.followUp.found ? '' : ' Say kindly that you could not find it.'}`
+        : `The listener just called in and said: ${q(plan.callIn)}. Answer them on air first, warmly and directly.${answer} If they ask for something you cannot do, say so kindly.`,
+    );
   }
   if (plan.notion) parts.push(notionTask(plan));
+  if (plan.memory) parts.push(memoryTask(plan.memory));
+  if (plan.action) parts.push(actionTask(plan.action));
   if (plan.outro) parts.push(plan.mix >= 2 ? 'Name what just played (title and artist) in a few words.' : 'Say what just played (title and artist), the way a DJ does after a song.');
-  if (plan.items.length && !plan.rundown) {
-    const day = plan.items.some((i) => DAY_SEGMENTS.has(i.segment));
-    parts.push(`Then talk about: ${plan.items.map((i) => i.segment).join(', ')} (use the matching FACTS)${day && plan.mix >= 2 ? '; this is the heart of the break' : ''}.`);
+  const topics = plan.items.filter((i) => i.segment !== 'time' && i.segment !== 'headsUp');
+  if (topics.length && !plan.rundown) {
+    const day = topics.some((i) => DAY_SEGMENTS.has(i.segment));
+    parts.push(`Then talk about: ${topics.map((i) => i.segment).join(', ')} (use the matching FACTS)${day && plan.mix >= 2 ? '; this is the heart of the break' : ''}.`);
   }
   if (plan.mix >= 2 && (plan.intro || plan.outro)) parts.push(MIX_SONGS[plan.mix]!);
   else if (plan.mix === 0 && plan.intro) parts.push(MIX_SONGS[0]!);
   if (found && !plan.intro && plan.kind !== 'callin') parts.push('End by introducing their request, so it can start right after this break.');
   else if (plan.intro) parts.push(next ? 'End by introducing their request as the next song, so it can start right after the last line.' : 'End by introducing the next song, so it can start right after the last line.');
   else if (plan.kind === 'callin') parts.push(found ? 'Then hand back to the music (their song was already named: do not name it again).' : 'Then hand back to the music.');
+  if (plan.items.some((i) => i.segment === 'time')) parts.push(`The last line gives the time check with ${TIME_SLOT} (see TIME CHECK)${plan.intro ? ' and then introduces the next song' : ''}.`);
   if (hosts.length > 1) parts.push(`${hosts[0]!.name} opens. Every host speaks at least once.`);
   return parts.join(' ');
 }
@@ -282,9 +331,15 @@ export function buildTurnPrompt(
     `RECENT BREAKS (already on air, out of date: do not repeat them or reuse their facts):\n${recentSheet(packet, hosts)}`,
     `THE BREAK PLAN: ${task(plan, hosts, packet)}`,
     said ? `SO FAR IN THIS BREAK:\n${said}` : 'You open the break.',
-    `Write line ${turn + 1} of ${plan.lines}${last ? ' (the last line' + (plan.intro ? ': introduce the next song' : '') + ')' : ''}. Reply to what was just said if anything was.${requestTurnNote(plan, packet, turn, last)}`,
+    `Write line ${turn + 1} of ${plan.lines}${last ? ' (the last line' + (plan.intro ? ': introduce the next song' : '') + ')' : ''}. Reply to what was just said if anything was.${requestTurnNote(plan, packet, turn, last)}${timeTurnNote(plan, last)}`,
   ].join('\n\n');
   return { system, user };
+}
+
+/** Turn by turn: the time-teller speaks last, the others never say the clock. */
+function timeTurnNote(plan: BreakPlan, last: boolean): string {
+  if (!plan.items.some((i) => i.segment === 'time')) return '';
+  return last ? ` You give the time check here: write ${TIME_SLOT} where the time goes (it is put in on air), once.` : ' Do not say the time (the last line does).';
 }
 
 /** Turn by turn, each host only sees its own line: say where the request's name goes so it is said once. */

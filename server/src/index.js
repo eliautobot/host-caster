@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import { actionRoutes } from './actions/routes.js';
+import { agentRoutes } from './agent/routes.js';
 import { accountRoutes } from './auth/account.js';
 import { oauthRoutes } from './auth/oauth.js';
 import { chatgptRoutes } from './chatgpt/routes.js';
@@ -142,6 +144,8 @@ export async function createServer(config = loadConfig(), opts = {}) {
   await app.register(googleRoutes);
   await app.register(imapRoutes);
   await app.register(notionRoutes);
+  await app.register(agentRoutes);
+  await app.register(actionRoutes);
   await app.register(libraryRoutes);
   await app.register(inboxRoutes);
   await app.register(reportRoutes);

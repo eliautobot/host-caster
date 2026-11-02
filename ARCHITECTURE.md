@@ -66,6 +66,17 @@ on-air log), then deletes the old one; `index.html` moves the theme key the same
   reminders: [{ id, text, at }], interests: string[], avoidTopics: string[] }`.
 - `settings` (single row id `'app'`): `{ theme, serverUrl?, activeStationId?, connections: {...}, onboarded }`.
 - `kv`: misc cache (weather, calendar, email, news snapshots with `fetchedAt`), used offline.
+- `memories` (schema v2): what the hosts remember, `MemoryCard { id, text (<= 200), kind: 'about'|'people'|
+  'preferences'|'routines'|'plans'|'jokes', source: 'callin'|'app'|'listening'|'you', learnedAt, expiresAt?, pinned?,
+  editedAt?, sensitive?, pattern?, evidence?: { count, days } }`. At most 60. Synced (a sync doc collection).
+- `journal` (schema v2): the short-term memory, `JournalEntry { id, at, day, kind: 'said'|'app'|'headsup'|'gotit'|
+  'liked'|'skipped'|'requested'|'listened'|'covered'|'breakSkipped', text, artist?, genre?, segments?, stationId? }`.
+  14 days, this device only.
+- `tracker` (schema v3): Your list, `TrackedItem { id, what (<= 160), kind: 'todo'|'waiting'|'deadline'|'bill'|
+  'delivery'|'invite'|'prepare', due? ('YYYY-MM-DD' or ISO), dueAllDay?, remindAt?, who?, source: { type: 'email'|
+  'event'|'notion'|'gtask'|'you'|'ai-app', id?, link?, label, from?, address? }, status: 'open'|'done'|'snoozed'|
+  'dismissed', snoozedUntil?, doneAt?, doneBy?, flags?: { careful?, newSender?, why? }, key, suggestDone?, gtask?:
+  { listId, taskId }, memoryId?, mentions?: { count, lastAt }, createdAt, updatedAt }`. Synced (a sync doc collection).
 
 ### Host
 ```
@@ -137,6 +148,19 @@ context packet, generate the script, voice all lines (4 at a time), with brain a
 song's end. The break is ready once the script and the FIRST clip are; later clips finish while it airs (a line
 whose clip is 4 s late is read by the device voice). `holdAfterCurrent` airs it: the ident rings and the first line
 comes in 450 ms into it, lines with music ducked, optional talk over the next intro.
+Air time (`core/radio/airtime.ts`): a break is planned for the moment it is expected on air (`airAt` = the song's
+expected end from the player, else now): the packet, part of day, "in N minutes" and the planner all count from it.
+The clock time has ONE time-teller: the LAST line, written with a `{TIME}` slot (the brain never sees the clock;
+`placeTimeLine` keeps one slot in the last line, takes clock times out of the others and adds "It's {TIME}." when the
+writer forgot). That line is voiced ahead without its time; when the break really starts (after any skip, pause or
+fast-forward), `retimeAtAir` fills the slot with the real time at the moment the line will play (now + the ident +
+the earlier lines' clip lengths, read from the MP3/WAV header or estimated from the words) and voices it while the
+earlier lines play. Not ready at its turn (300 ms grace; a one-line break waits up to 2.5 s, none when the voice is
+measured slower), or not in the clock's own minute: this device's voice (also the stand-in when the host's voice
+failed) or one measured under 0.6 s says it again for that very moment; else, within 30 s it plays as voiced, further
+off without the time, or is left out when only the time was in it. A break airing a minute or more off plan also gets its "in N minutes" recounted and voiced again, else an
+absolute time ("at 2:30 PM", voiced ahead) stands in. Never a wrong time; a missing one is fine. The scripted
+fallback uses the same slot.
 If generation fails or is late, skip the break, never leave silence. Multi-host: if all hosts share one brain, one
 call returns the whole script as JSON lines; otherwise turn by turn, each host's own brain sees the transcript so far.
 The scripted fallback (`core/radio/builtin.ts`, varied template lines from the same context packet, no network) is never
@@ -200,6 +224,161 @@ the planner sees the station's last 60 breaks (`RECENT_BREAKS`). Settings > What
 Notion (`context/notion.ts`, when `settings.connections.notion.connected`): the chosen pages join `notes` as "Your
 Notion page ... says: ..." lines (kv `notion:context`, 10 min).
 
+`core/agent/` the hosts look things up (only a host with a real AI brain, and only while
+`settings.connections.lookups.enabled !== false`; `web !== false` adds web search where the server offers it):
+- `tools.ts`: the lookups (read only): `calendar_event`, `calendar_search`, `email_search`, `email_read`,
+  `email_thread`, `notion_search`, `notion_read`, `open_link`, `news_article`, `weather`, `web_search`.
+  `availableTools(ctx)` offers only what this account connected (`serverStatus()` = `GET /api/agent/status`, cached
+  5 min). `runTool` runs weather and calendar feeds (ICS, from the kv cache) on the device and everything else on the
+  server (`POST /api/agent/tool`); it never throws (a failure is an answer the model reads).
+- `step.ts`: one model turn with tools for every brain kind: OpenAI-compatible and Anthropic on the device, the rest
+  through `/api/ai/chat` with `tools` (or the desktop helper for a ChatGPT plan there). `ToolsUnsupportedError` when a
+  model or server refuses tools.
+- `loop.ts`: `runAgent({ brain, system, user, tools, ctx, maxSteps, maxCalls, deadline, answer })`: native tool calls,
+  else a JSON way of asking (`{"tool": .., "args": ..}` / `{"done": ..}`), remembered per brain and model (kv
+  `agent:mode:<brain>:<model>`, a JSON verdict re-checked after 14 days). Hard caps per task: steps, lookups, time.
+- `lookups.ts`: the Lookups log. Signed in, the server's list (it logs its own lookups; the device reports the ones it
+  ran with `POST /api/agent/lookups`); signed out, this device's (kv `agent:lookups`, newest 300, 400 a day).
+- `brief.ts` (pure): an item's details in a host's few words (people and answers, the video call but never its link,
+  related emails), the facts lines for prompts and scripted lines, the scripted dossier made from the item's own
+  fields, and `researchItems(packet)`: events in the next 36 hours, important mail and invitations, the top headlines
+  with a link, each with a version (an event's last change) and a priority.
+- `research.ts`: the research desk. `researchDesk.schedule(station, packet)` (after each break is prepared) queues
+  every item without a dossier at its version (12 at most, a failed one waits 30 min) and researches them one at a
+  time in the background with the station's lead host with a real brain (`leadWithBrain`), never while a break is
+  being written (`markBreakPreparing`): at most 4 steps, 5 lookups, 60 s (120 s for a model on the LAN), 60 tasks a
+  day per device. The answer is a `Dossier` `{ about, who, prepare, links, questions, sources, by: 'ai', hostName }`
+  (links kept only when they appear in what was read), kept in kv `agent:dossiers` by `<key>@<version>` for 7 days
+  (150 at most), shared by every station. Breaks only read dossiers (`dossiersForPacket`, never waiting); without one
+  the scripted dossier stands in. Questions from AI apps (inbox notes) are answered in the background too (kv
+  `agent:answers`) and a question waits up to 3 min for its answer before it airs. `researchDesk.research(item,
+  station)` is also the "Look into it now" button.
+- `changes.ts` (pure) + `headsup.ts`: heads-ups. While the radio plays (and only then: quiet when paused),
+  `headsUpWatch` checks every 2.5 min (10 min after a 429) with `GET /api/google/watch?since=&historyId=` (Calendar
+  `events.list` with `updatedMin` + `showDeleted` per visible calendar, next 12 h, the calendar list cached 30 min;
+  Gmail `users.history.list` from the last `historyId`, the new inbox messages with the signs of mass mail: list
+  headers, Precedence, Auto-Submitted, Gmail's promotions/updates/social/forums labels, no-reply senders); calendar
+  feeds (ICS) and IMAP every other check (a whole download each). `diffCalendar` compares with what the hosts last
+  knew (the `calendar:google` snapshot if under 30 min old, else a fresh list): an event in the next 12 h cancelled,
+  moved (time or place), new, a guest declining, the organizer changing, a video link added, an invitation to answer.
+  Mail: `judgeMail` (the lead host's brain for the ones that might be urgent: a real person, time-sensitive, asks for
+  action today; 12 s) else `mailByRules` (urgent words in the subject, or in the text from someone they meet today /
+  a reply in their thread / marked important). Mass mail never counts. Changes patch the kv snapshots in place, so the
+  next break knows. Each new heads-up (kv `headsups`, 48 h, one per change id, ever) gets `noteFor`: the dossier plus a
+  quick lookup for the reason (3 steps, 2 lookups, 12 s, 25 s on the LAN, 40 a day) and a ready line in the lead
+  host's words. `deliveryFor`: urgent (a meeting within 2 h cancelled or moved, anything changed starting within 15
+  min, urgent mail) breaks in over the ducked music (`BreakKind 'headsup'`, the lead host, chime, then the song goes
+  on; at most 3 an hour) or, when the song ends within 90 s, the setting says After the song or the hour is full, a
+  break right after this song; the rest open the next break (`packet.headsUps`, planned first; a heads-up that came
+  in after the break was written is added in front of it at air). Reminders (`remindMin`, default 10) for meetings
+  with guests or a video call, skipped after a recent heads-up about it or a "got it". `snoozeLast` on a call-in that
+  says "got it/thanks". Follow-ups read `headsup:<id>` topics with the note. Settings: `connections.headsUps`
+  `{ breakIn: 'now'|'after'|'off', remindMin: 0|5|10|15 }`; the Heads-ups card in What your hosts can see. The
+  calendar's own notice (Google's "Canceled event" mail with the organizer's note, never a heads-up itself) arriving
+  in the same check is linked as `source`, so the reason is known without a search.
+- `followup.ts`: a call-in (or AI app) asking about something the hosts said ("what's that meeting about?") gets the
+  recent breaks' items with their dossiers and may look things up live (4 steps, 4 lookups, about 20 s; a host holds
+  the line after 2.5 s); without a brain, or when that fails, a scripted answer from the items' fields.
+Settings > What your hosts can see (`ui/screens/settings/HostsLookups.tsx`) has the switches, what the hosts found
+out for each upcoming item (`hostsView` returns `desk: { station, items }` from the same packet) and the Lookups list.
+
+`core/memory/` what the hosts remember about the listener: a bounded, curated long-term memory (cards) plus a
+short-term journal, shown in Settings > What your hosts remember (`ui/screens/settings/Memory.tsx`).
+- `cards.ts` (pure): `planAdd` (a near duplicate updates its card; a full memory lets go of the least useful learned
+  card: an expired plan, a weak pattern, the oldest; the listener's own, edited and pinned cards never go), `tidy`
+  (expired plans, duplicates, patterns not seen for 3 weeks with little evidence, the bound). `store.ts`: the Dexie
+  side, serialised; `memoryEvents` ('change', 'journal').
+- `safety.ts` (pure): never passwords, codes, numbers (4+ digits but a year), emails or links; sensitive topics
+  (health, money, relationships, religion, politics) only when the listener asked ("remember that ..."); `grounded`:
+  a learned card's names, numbers and most words must come from the listener's own words (or the cards it merges), so
+  text from an email, a page or the news can never plant a memory.
+- `journal.ts`: rows written by the radio (call-ins, AI app notes, heads-ups and "got it", likes, early skips
+  (first third), requests, station and hour, what a break covered or that Next skipped it, with its segments), behind
+  the two switches `connections.memory { fromWords, fromListening }` (on unless off); pruned at 14 days.
+- `commands.ts`: "remember that ..." / "forget that ..." / "forget everything" parsed and applied before the call-in
+  break is written (any brain), so the plan carries `memory` and the hosts confirm it (`memoryFact`/`memoryTask`, the
+  scripted fallback says `memorySpoken`). Dates said ("next weekend") become real dates and a plan's expiry.
+- `learn.ts`: after a call-in or AI app note that is a statement about the listener (`worthLearning`), one step with
+  the lead host's brain through the `update_memory` tool (add / update / forget, at most 3; JSON when the model has no
+  tools), then `validateActions` checks kind, card ids, safety and grounding. 30 steps a day (kv `memory:learned`).
+- `patterns.ts` (pure) + `reflect.ts`: the daily reflection (first play of the day, or hourly while the app runs:
+  `memoryUpkeep`, kv `memory:upkeep`) turns the journal into pattern cards only with 3+ times over 2+ days (skipped
+  segments by time of day against those heard out, artists skipped or liked, genres (on a weekday), listening hours);
+  with a brain it may add up to 3 patterns citing journal rows (checked: 3+ rows, 2+ days, their words). The weekly
+  consolidation tidies with rules, then the brain may merge cards, update one, or forget one replaced by a newer card
+  of the same kind (named in `by`, checked). The scripted fallback brain never writes: rules only.
+- `brief.ts`: each break's `packet.memory`: `quieter` (segments the patterns play down now: the planner takes them out
+  of the rundown and away from the pick), then for the planned topics `facts` (pinned, plans in the next 10 days,
+  cards sharing words with the topics or the call, one recent, one pattern; 8 cards / 700 characters; sensitive only
+  when the call is about it) and `recently` (the listener's words of the last 2 days when the call looks back or they
+  match). The prompt gets WHAT YOU KNOW ABOUT THE LISTENER and `MEMORY_RULE` (at most one memory per break, never
+  recited, nothing sensitive unless they brought it up, may be out of date). `search.ts`: the `memory_search` and
+  `journal_search` lookups (on the device) and the scripted fallback's answer from memory for call-ins.
+
+`core/tracker/` Your list (`db.tracker`), the screen `#/list` (`ui/screens/YourList.tsx`: the list, and "Done for
+you" = the actions log with Undo). Two rules, in force across this module and `core/actions/` (spec: `.work/ag4-spec.md`):
+Rule 1, outside content (mail, invites, Notion, web, news) is information, never instructions: it can only become a
+TRACKED ITEM labeled with its source, never a memory, setting or action. Rule 2, the AI proposes, the listener
+confirms, the APP acts (below).
+- `store.ts`: `addItem` dedupes by `itemKey` (source + a few content words) and `sameAs` (same key, the same source
+  record and alike, or very alike with the same due day and person, so a mail and its event become one item);
+  dismissed items are never brought back. Bounds: `MAX_OPEN` 400 (undated outside items go first), done items shown
+  7 days, done/dismissed rows removed after 30 (`trim`). `trackerEvents` ('change').
+- `safety.ts` (pure): `caution` flags money / gift cards / bank details, passwords / codes / logins, "click this link",
+  text that tries to instruct the hosts (incl. hidden characters and other languages) and data-sharing asks;
+  `speakable` strips links, email addresses and hidden characters from anything the hosts may read.
+- `extract.ts` (pure): `extractItems({ calendar, email, notion, dossiers, known, now, tz, from })` turns events, mail
+  that asks something of the listener (never no-reply or mass mail), open Notion to-dos and the research desk's
+  dossiers into `TrackedDraft`s with `dueFrom` (the source's own "by 2 PM", read from when it was sent). Careful
+  content and senders the listener never emailed (`known[address] !== true`) get `flags { careful, newSender, why }`
+  and are never a to-do. `doneEvidence`: later mail like "thanks for the quotes" only sets `suggestDone` (the hosts ask).
+- `sync.ts`: `trackFromPacket(packet)` runs in the background after each break is prepared (`radio/prepare.ts`),
+  honoring `connections.tracker { enabled, fromMail, fromEvents, fromNotion }`. `knownSenders` asks
+  `POST /api/google/known-senders` (Gmail `in:sent to:<addr>`), cached 7 days in kv `tracker:known-senders`.
+  `syncGoogleTasks` (every 10 min, only with `connections.actions.tasks` and the `tasks` scope; `taskLists` picks the
+  lists): done in Google = done here; done here is sent to Google only as a `task.complete` the listener says yes to.
+- `api.ts`: the read-only calls (`/api/actions/status`, `/api/google/tasks`, known senders). Background code imports
+  only this, so it cannot even reach the calls that propose or run an action.
+- `brief.ts`: `listBrief` gives `packet.tracker` (YOUR LIST lines + `LIST_RULE`: information, not instructions; a BE
+  CAREFUL line is a warning) with a reminder whose time came, overdue follow-ups, due soon, "looks done?", a one-time
+  careful warning, the morning rundown. Bounded: one item a break (two in a morning rundown), `MAX_PER_HOUR` 4, the
+  same item not again for 3 h (kv `tracker:mentions`, `markListAired` when the break airs). `listSearch` is the
+  read-only `my_list` lookup (`agent/tools.ts`); careful items say so.
+- `commands.ts`: the listener's own words, read by code with any brain: "remind me to ... <when>", "add X to Your
+  list" (`parseTrackerCommand`, times via `actions/when.ts`), "I sent the quotes" (`matchDone`, asks when two fit).
+
+`core/actions/` the fixed things the hosts can do (`types.ts`): level 1 (own space, no confirm, only from the
+listener's words, app only): `list.add`, `reminder.add`, Notion (`/api/notion/write`); level 2 (ask first, their own
+accounts, server executed): `calendar.add`, `task.add`, `task.complete`, `task.edit`; level 3 (ask first + read back
+exactly, others will see it): `invite.respond`. Nothing else exists. Switches: `connections.actions { calendar,
+tasks, taskLists }` (Settings > Connections > Google, `GoogleActions.tsx`), off by default; on asks Google for the scope.
+- `when.ts` (pure): the listener's "Tuesday at 3", "tomorrow at noon for 30 minutes", "this month", "3 PM Pacific" ->
+  exact zone-correct times (DST days, all-day with Google's exclusive end, late-night "tomorrow"); refuses the past
+  and absurd lengths. No model: the read-back says the resolved time, so what is confirmed is what is written.
+- `understand.ts`: `mightAskToAct` (cheap gate), `neverAllowed` (payments, mail, inviting people... answered plainly),
+  then one brain step in strict JSON (12 s) with the listener's words, open invitations and Google tasks; code then
+  checks it: the title must be grounded in the listener's words (`grounded`, half the content words), the time comes
+  from `when.ts`, the invitation from `pickInvite` (organizer or title word in the words, one clear winner) and the
+  answer from `answerFromWords`. An injected title or answer is refused. Without a brain reply: `parseOffline`.
+- `engine.ts`: `propose` (never executes), `pendingAction`, `confirmAndRun` (confirm -> token -> execute; a drop is
+  retried with the same token or read back, never sent twice), `cancelAction`, `undoAction`, `actionHistory`,
+  `classifyAnswer` (code, never a model: only plain yes words are yes; anything else is not).
+- `callin.ts`: `takeActionTurn` before a call-in break is written: (1) an answer to the newest waiting question (a
+  call-in only), (2) Your list commands (any brain; may offer Google Tasks too), (3) with a real brain, a proposal. The
+  `ActionTurn` carries a FACTS line and the exact last line of the break, written by code (`askLine` / `doneLine` /
+  `failedLine`, the server's own summary), spoken by the lead host; the model only reacts around it.
+- `inbox.ts`: `nextInboxAction`: an AI-app note that asks to act counts as the listener's words (Your list right away),
+  levels 2-3 still wait for a call-in yes or a tap. An AI app never confirms.
+
+Flow: call-in words -> `takeActionTurn` -> `understandAction` (grounded) -> `POST /api/actions/propose` (server
+validates again, checks Google, writes the summary) -> the break's last line reads it back -> the listener's "yes"
+(`classifyAnswer`) or a tap on the card -> `confirm` -> one-time token -> `execute` -> Google -> the log -> "Done
+for you" with Undo. Where the rules live: Rule 1 in `tracker/safety.ts`, `tracker/extract.ts` (items only),
+`understand.ts` (grounding), `memory/safety.ts` (memory), `LIST_RULE`; Rule 2 in `engine.ts` (`classifyAnswer`, only
+`confirmAndRun` gets a token), `tracker/api.ts` (background has no write path) and `server/src/actions/` (strict
+schemas, token, caps). Tests: `actions.test.ts`, `when.test.ts`, `injection.test.ts` (30 hostile inputs over 9 doors),
+`tracker.test.ts`.
+
 `core/api/` (owner: server agent) typed client for the server: `api.baseUrl`, `api.session`, `auth.signIn('google'|
 'x'|'local')`, `auth.signOut()`, `sync.pull()/push()`, `aiProxy`, `ttsProxy`, `integrations.calendar()`, `.email()`,
 `.fetchText(url)` (ICS/RSS through the server), `inbox.poll()`, `youtube.*`, `serverLibrary.*`.
@@ -216,7 +395,10 @@ Config from env (and `.env`): `PORT` (8660), `PUBLIC_URL`, `DATA_DIR` (./data), 
 generated into DATA_DIR on first start if missing), `GOOGLE_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`,
 `ALLOW_LOCAL_ACCOUNTS` (true when no OAuth is configured), `MUSIC_DIR` (optional server library),
 `ALLOW_PRIVATE_FETCH` (false), `APP_SCHEME` (`hostcaster`), `NOTION_CLIENT_ID/SECRET` (the owner's public Notion
-connection; empty = the Notion card says it is not set up), `NOTION_VERSION` (`2026-03-11`).
+connection; empty = the Notion card says it is not set up), `NOTION_VERSION` (`2026-03-11`), the hosts' lookups:
+`SEARXNG_URL`, `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY`, `WEB_SEARCH_PROVIDER` (`searxng|brave|tavily|off`; none
+set = no web search offered), `AGENT_LOOKUPS_PER_DAY` (400), `AGENT_WEB_SEARCHES_PER_DAY` (40), the hosts' actions:
+`ACTIONS_PER_DAY` (50 executions) and `ACTION_PROPOSALS_PER_DAY` (200) per account in 24 hours.
 
 Tables: `users`, `identities` (provider, subject, encrypted tokens), `sessions` (sha256 token, kind web|app,
 expires), `sync_docs` (user_id, json, rev), `sync_items` (user_id, kind, id, json or NULL = deleted, updated_at, seq)
@@ -224,12 +406,19 @@ and `sync_item_meta` (user_id, seq, pruned_seq), `secrets` (encrypted provider k
 `connector_tokens`, `server_tracks`, `chatgpt_accounts` (per user: issued ChatGPT client id, verified subject, sealed
 tokens; the install's agent host id lives in `DATA_DIR/chatgpt-host.json`), `notion_links` (per user: workspace, sealed
 tokens, settings `{ read, write, writesOn, recapOn }`) and `notion_activity` (every block the hosts added or tried
-to, with its block id for Undo and an optional `ref` so one ask never writes twice; migration 8).
+to, with its block id for Undo and an optional `ref` so one ask never writes twice; migration 8), `agent_lookups`
+(the hosts' lookups per account: at, tool, what, host, purpose, ok, ms, cost, where_ran server|device; kept 30 days,
+counted for the daily caps over a rolling 24 hours; migration 9), `actions` (migration 10: every proposal and what
+became of it; type, level, origin, status, timestamps, `payload_hash`, `ref`, `token_hash` (sha256 only), attempts,
+error; `enc` sealed with aad `action:<user>:<id>` = payload, summary, others, said, context, result, undo; pruned
+after 90 days, cascades with the user).
 Secrets at rest: AES-256-GCM with SECRET_KEY; API keys never returned to clients in clear unless the owner asks.
 
 Routes (JSON, errors `{ error: { code, message } }`):
 - `GET /api/health`, `GET /api/config` (which sign-ins are on, server library on, version).
-- Auth: `GET /auth/google/start?app=1&scopes=calendar,gmail,youtube`, `GET /auth/google/callback`,
+- Auth: `GET /auth/google/start?app=1&scopes=calendar,gmail,youtube` (also `calendarEvents` =
+  `calendar.events` and `tasks`, asked only when the listener turns an actions switch on; `&link=1` adds a scope to
+  the signed-in account), `GET /auth/google/callback`,
   `GET /auth/x/start`, `GET /auth/x/callback` (OAuth 2.0 PKCE, `users.read tweet.read`), `POST /api/auth/local/signup`,
   `POST /api/auth/local/login`, `POST /api/auth/exchange {code, verifier}` (native: one-time code from the
   `hostcaster://auth?code=` deep link plus the verifier whose hash the app sent as `cc` on `/auth/<p>/start?app=1`,
@@ -244,6 +433,17 @@ Routes (JSON, errors `{ error: { code, message } }`):
 - Secrets: `PUT /api/secrets/:ref {value}`, `DELETE /api/secrets/:ref`, `GET /api/secrets` and
   `GET /api/secrets/:ref` (hint only; values never go back to a client).
 - AI and voice proxy: `POST /api/ai/chat`, `POST /api/ai/models`, `POST /api/tts` (audio bytes), `POST /api/tts/voices`.
+  `/api/ai/chat` takes `tools` (at most 16, `{ name, description, parameters }`) and tool turns in `messages`
+  (`{ role: 'assistant', content, toolCalls }`, `{ role: 'tool', toolCallId, name, content }`) and answers
+  `{ text, toolCalls? }`, one shape for OpenAI-compatible, Anthropic, ChatGPT plan and Host-Caster AI
+  (`server/src/ai/wire.js`).
+- The hosts' lookups (`server/src/agent/`): `GET /api/agent/status` -> `{ tools: { calendar, gmail, imap, notion, web,
+  webProvider?, links }, caps: { lookupsPerDay, webSearchesPerDay }, used: { lookups, webSearches } }`,
+  `POST /api/agent/tool {name, args, host?, purpose?}` -> `{ result, what }` (runs one read-only lookup and logs it;
+  429 `lookups_limit` / `web_search_limit` past the caps; linked pages go through the same egress guard as
+  `/api/fetch-text`), `POST /api/agent/lookups {items}` (lookups the app ran on the device: weather, calendar feeds),
+  `GET /api/agent/lookups?limit=` (newest first, 30 days), `DELETE /api/agent/lookups`. Web search
+  (`agent/search.js`): the operator's SearXNG (JSON format), Brave Search or Tavily, top 5 results.
 - ChatGPT plan: `GET /api/chatgpt/status`, `POST /api/chatgpt/start` (authorize URL; redirect
   `http://127.0.0.1:<port>/auth/callback`, caught by the server's own listener or pasted back with
   `POST /api/chatgpt/finish {url}`), `GET /api/chatgpt/models`, `POST /api/chatgpt/disconnect` (revokes),
@@ -253,7 +453,10 @@ Routes (JSON, errors `{ error: { code, message } }`):
   YouTube pages + `next`, `total`, `left { private, deleted, unavailable }`, `blocked`; the app reads up to 5,000
   videos in steps, about 2 quota units per 50), `GET /api/google/youtube/search?q=`,
   `POST /api/imap/test`, `GET /api/imap/summary`, `POST /api/fetch-text {url}` (ICS/RSS; blocks private ranges unless
-  ALLOW_PRIVATE_FETCH).
+  ALLOW_PRIVATE_FETCH). Mail summaries carry `address` (the lowercase sender). `GET /api/google/tasks` -> `{ lists,
+  tasks }` (open + completed in the last 3 days, 10 lists, 300 tasks each; 403 `scope_missing` without `tasks`),
+  `POST /api/google/known-senders {emails (<= 40)}` -> `{ known: { email: bool } }` (Gmail `in:sent to:<addr>`,
+  maxResults 1, cached 7 days per user in memory; no Gmail = `{}`).
 - Notion (`server/src/integrations/notion/`): `POST /api/notion/start {app?, cc?, return?}` -> `{ url }` (one-time,
   opens `/auth/notion/start`, which binds the browser and goes to Notion's consent), `GET /auth/notion/callback` (web:
   stores the link, back to `/#/settings/connections?notion=connected`; phone: `hostcaster://notion?code=`, finished with
@@ -264,6 +467,33 @@ Routes (JSON, errors `{ error: { code, message } }`):
   `POST /api/notion/write {kind: todo|note, text, source: call|app, ref?, tz?}` (appends one block; never edits or
   deletes the user's blocks; 30 an hour), `POST /api/notion/recap {day, text}` (once a day, only when turned on),
   `GET /api/notion/activity`, `POST /api/notion/activity/:id/undo` (trashes only that block).
+- The hosts' actions (`server/src/actions/`, Rule 2 on the server; app side `core/actions/`):
+  `registry.js` is the fixed list (`TYPES`: `calendar.add`, `task.add`, `task.complete`, `task.edit` level 2,
+  `invite.respond` level 3), strict schemas (`normalize`: unknown keys refused, so no `attendees`; past starts with a
+  2 min grace, end <= start, timed > 24 h, all-day > 14 days refused), `payloadHash` = sha256 of canonical
+  `{type, payload}`, `describe` (the plain summary the listener hears; `others` names the organizer). Any other type
+  is 400 `action_not_allowed`. `store.js` is the log (table `actions`): every state change is a compare-and-set in
+  a db transaction (proposed -> confirmed -> executing -> done | failed; proposed -> cancelled | expired; done ->
+  undone), so a double yes, two devices or 20 concurrent confirms see one winner; an execution unfinished after 5 min
+  reads as failed `unknown_outcome`. `google.js` runs and undoes them: `prepare` at propose time (write scope granted,
+  the task exists with that title, the invitation exists, is not cancelled or over, the listener is a guest and not
+  the organizer); `runAction` with up to 3 tries on Google 429/5xx/timeouts (0.4 s, 1.2 s, Retry-After capped at
+  3 s), then an honest plain failure; no duplicates: an event id derived from the action id (`eventIdOf`, a retry
+  gets 409 and adopts it), a task insert retried after an unknown outcome first lists tasks updated since the first
+  try (minus 60 s) and adopts one with the same title and due; events are inserted on `primary` with `sendUpdates=none` and no attendees;
+  `invite.respond` re-reads the event and patches only the self attendee's `responseStatus` (+ comment); the previous
+  values are kept (sealed) for `undoAction` (delete the event or task, restore the answer, reopen or patch back).
+  `routes.js`:
+  `POST /api/actions/propose {type, payload, origin, said?, ref?, tz?}` -> 201 `{ action }` (same `ref` = the same
+  proposal, 200; 400 `invalid_action` with `field` | `action_not_allowed`; 403 `scope_missing`; 429
+  `proposals_limit`; proposal TTL 10 min), `POST /api/actions/:id/confirm {payloadHash, via}` -> `{ token, action }`
+  (or `{ action }` when already confirmed or run; 409 `payload_changed`, 410 `action_expired`, another user's id =
+  404), `POST /api/actions/:id/execute {token, payload}` -> `{ action }` (token bound to user + id + payload hash,
+  2 min, single use, spent in the transaction that moves the status to executing; 401 `token_invalid` |
+  `token_expired` | `token_used` with the current action; 429 `actions_limit`; Google gets the stored payload),
+  `GET /api/actions/:id`, `GET /api/actions?limit=&status=` (newest first), `POST /api/actions/:id/cancel`
+  (idempotent), `POST /api/actions/:id/undo` (idempotent, done + undoable, 7 days), `GET /api/actions/status` ->
+  `{ calendarWrite, tasks, caps: { perDay, proposalsPerDay }, used }`.
 - Server library: `GET /api/library/tracks`, `GET /api/library/stream/:id` (Range), `GET /api/library/art/:id`,
   `POST /api/library/rescan`.
 - AI apps connector (MCP, Streamable HTTP): `POST /mcp/:token`. Tools: `now_playing`, `list_hosts`,
@@ -291,7 +521,9 @@ Signed in, every device keeps a copy of the account and syncs in rounds (`core/a
 local change, on focus, every 5 minutes). A round is the doc, then the items.
 
 - **The doc** (`sync_docs`, one JSON per account with a rev): hosts, stations, brains, voices, profile, settings,
-  playlist names. Three-way merge per record (`core/api/merge.ts`): newer `updatedAt` wins, deletions travel as
+  playlist names, memory cards (`memories`; the server seals them at rest with the secrets key, bound to the account,
+  as `memoriesSealed`, and opens them for the owner's GET; a doc from an older app without `memories` keeps them),
+  and Your list (`tracker`, sealed the same way as `trackerSealed`, at most 1,500 items). Three-way merge per record (`core/api/merge.ts`): newer `updatedAt` wins, deletions travel as
   tombstones (`deleted`, 90 days). A device joining an account that already has a doc leaves its untouched starter
   records (`seed-*`) out, so a new browser never brings the demo station back.
 - **The items** (`sync_items`, one row per record, `core/api/syncItems.ts`): `track` (a song that is a reference:

@@ -5,7 +5,10 @@ import { getIdentity } from '../auth/users.js';
 import { HttpError } from '../errors.js';
 import { providerFetch } from '../net/http.js';
 
-const SERVICE_LABEL = { calendar: 'Google Calendar', gmail: 'Gmail', youtube: 'YouTube' };
+const SERVICE_LABEL = { calendar: 'Google Calendar', gmail: 'Gmail', youtube: 'YouTube', calendarEvents: 'Google Calendar', tasks: 'Google Tasks' };
+/** what the listener allows with each write scope ("Allow Host-Caster to add to your calendar first") */
+const WRITE_LABEL = { calendarEvents: 'add to your calendar', tasks: 'use your Google Tasks' };
+export const serviceLabel = (scope) => SERVICE_LABEL[scope] ?? 'Google';
 
 function notConnected(scope) {
   const code = scope === 'youtube' ? 'youtube_not_connected' : 'google_not_connected';
@@ -13,13 +16,33 @@ function notConnected(scope) {
 }
 
 function scopeMissing(scope) {
+  if (WRITE_LABEL[scope]) return new HttpError(403, 'scope_missing', `Allow Host-Caster to ${WRITE_LABEL[scope]} first`, { service: scope });
   return new HttpError(403, 'scope_missing', `Allow Host-Caster to read ${SERVICE_LABEL[scope] ?? 'this Google service'} first`);
+}
+
+/** True when this user granted the short scope (no Google call). */
+export function hasGoogleScope(app, userId, scope) {
+  if (!app.config.google.enabled) return false;
+  const identity = getIdentity(app.db, userId, 'google');
+  return Boolean(identity?.scopes.split(' ').includes(scope));
 }
 
 function save(app, identity, tokens) {
   app.db
     .prepare('UPDATE identities SET tokens_enc = ?, updated_at = ? WHERE id = ?')
     .run(sealTokens(app, 'google', identity.subject, tokens), Date.now(), identity.id);
+}
+
+const RATE_REASONS = /^(rateLimitExceeded|userRateLimitExceeded|quotaExceeded|dailyLimitExceeded)$/;
+
+/** Retry-After in ms (seconds or an HTTP date), undefined when absent. */
+function retryAfterMs(res) {
+  const raw = res.headers.get('retry-after');
+  if (!raw) return undefined;
+  const secs = Number(raw);
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : undefined;
 }
 
 /** A Google API client bound to one user and one service scope. */
@@ -43,8 +66,16 @@ export function googleClient(app, userId, scope) {
     }
   }
 
-  /** GET {apiBase}{path} as JSON; refreshes once on 401. */
-  async function get(path, params = {}) {
+  /**
+   * {method} {apiBase}{path} with a JSON body; the answer as JSON ({} when empty). Refreshes once on 401. Errors:
+   * 403 scope_missing, 404 not_found, 409 upstream_conflict, 410 gone, 429 upstream_rate_limited, else 502
+   * upstream_error; each carries `upstreamStatus` (and `retryAfterMs` when Google sent one). Network trouble comes
+   * from providerFetch: 504 upstream_timeout, 502 upstream_unreachable.
+   * @param {string} method
+   * @param {string} path
+   * @param {{ params?: Record<string, unknown>, body?: unknown, timeoutMs?: number }} [opts]
+   */
+  async function call(method, path, { params = {}, body, timeoutMs } = {}) {
     if (!tokens.expires_at || tokens.expires_at - 60_000 < Date.now()) await refresh();
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
@@ -53,27 +84,42 @@ export function googleClient(app, userId, scope) {
     }
     const url = `${app.config.google.apiBase}${path}${qs.size ? `?${qs}` : ''}`;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await providerFetch(url, { headers: { authorization: `Bearer ${tokens.access_token}`, accept: 'application/json' } });
+      const headers = { authorization: `Bearer ${tokens.access_token}`, accept: 'application/json' };
+      if (body !== undefined) headers['content-type'] = 'application/json';
+      const res = await providerFetch(url, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }, timeoutMs);
       if (res.status === 401 && attempt === 0) {
+        await res.body?.cancel().catch(() => undefined);
         await refresh();
         continue;
       }
-      const body = await res.json().catch(() => ({}));
-      if (res.ok) return body;
-      const reason = body?.error?.errors?.[0]?.reason ?? body?.error?.status ?? '';
-      if (res.status === 403 && /insufficient|PERMISSION_DENIED|ACCESS_TOKEN_SCOPE/i.test(String(reason) + JSON.stringify(body?.error ?? ''))) {
-        throw scopeMissing(scope);
+      const text = await res.text().catch(() => '');
+      let out = {};
+      try {
+        out = text ? JSON.parse(text) : {};
+      } catch {
+        out = {};
       }
-      if (res.status === 404) throw new HttpError(404, 'not_found', body?.error?.message ?? 'Not found');
-      if (res.status === 429 || reason === 'quotaExceeded' || reason === 'rateLimitExceeded') {
-        throw new HttpError(429, 'upstream_rate_limited', 'Google says to slow down. Try again later.');
+      if (res.ok) return out;
+      const reason = out?.error?.errors?.[0]?.reason ?? out?.error?.status ?? '';
+      const fail = (err) => Object.assign(err, { upstreamStatus: res.status, retryAfterMs: retryAfterMs(res) });
+      if (res.status === 429 || RATE_REASONS.test(String(reason))) {
+        throw fail(new HttpError(429, 'upstream_rate_limited', 'Google says to slow down. Try again later.'));
       }
-      throw new HttpError(502, 'upstream_error', `Google: ${body?.error?.message ?? `HTTP ${res.status}`}`);
+      if (res.status === 403 && /insufficient|PERMISSION_DENIED|ACCESS_TOKEN_SCOPE/i.test(String(reason) + JSON.stringify(out?.error ?? ''))) {
+        throw fail(scopeMissing(scope));
+      }
+      if (res.status === 404) throw fail(new HttpError(404, 'not_found', out?.error?.message ?? 'Not found'));
+      if (res.status === 409) throw fail(new HttpError(409, 'upstream_conflict', out?.error?.message ?? 'Already exists'));
+      if (res.status === 410) throw fail(new HttpError(410, 'gone', out?.error?.message ?? 'Already deleted'));
+      throw fail(new HttpError(502, 'upstream_error', `Google: ${out?.error?.message ?? `HTTP ${res.status}`}`));
     }
     throw scopeMissing(scope);
   }
 
-  return { get };
+  /** GET {apiBase}{path} as JSON; refreshes once on 401. */
+  const get = (path, params = {}) => call('GET', path, { params });
+
+  return { get, call };
 }
 
 /**

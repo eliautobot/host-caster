@@ -1,6 +1,7 @@
 // Responses API calls on a ChatGPT plan token: the model catalog and one streamed response read to the end.
 // The plan route wants store false + stream true, instructions instead of system messages, and none of temperature,
 // top_p, max_output_tokens, user, metadata ... Success is response.completed, nothing less.
+import { fromResponsesOutput } from '../ai/wire.js';
 import { bodyShape, chatgptError, responsesError, upstreamCode } from './errors.js';
 
 const MAX_TEXT = 1024 * 1024;
@@ -80,9 +81,10 @@ export async function streamResponse(apiBase, accessToken, req, timeoutMs = 9000
   const body = {
     model: req.model,
     instructions: req.instructions,
-    input: req.input.map((m) => ({ role: m.role, content: m.content })),
+    input: req.input.map((m) => (m.type ? m : { role: m.role, content: m.content })),
     store: false,
     stream: true,
+    ...(req.tools?.length ? { tools: req.tools, tool_choice: 'auto', parallel_tool_calls: true } : {}),
     ...(req.reasoning ? { reasoning: req.reasoning } : {}),
     ...(req.text ? { text: req.text } : {}),
   };
@@ -132,7 +134,8 @@ export async function streamResponse(apiBase, accessToken, req, timeoutMs = 9000
   }
   if (!completed) throw failure(chatgptError.failed('The ChatGPT answer ended before it was complete. Try again.'), { status: res.status, requestId });
   if (!text) text = outputText(completed);
-  return { text: text.trim(), model: completed.model ?? req.model, ...(completed.usage ? { usage: completed.usage } : {}) };
+  const toolCalls = req.tools?.length ? fromResponsesOutput(completed.output) : [];
+  return { text: text.trim(), ...(toolCalls.length ? { toolCalls } : {}), model: completed.model ?? req.model, ...(completed.usage ? { usage: completed.usage } : {}) };
 }
 
 /** Text from a completed response object (when no deltas were streamed). */

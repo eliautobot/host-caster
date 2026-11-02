@@ -21,6 +21,7 @@ const stage = join(desktopDir, '.build/stage');
 
 /** Everything the local helper imports from the server (checked below by importing it with plain Node). */
 export const SERVER_FILES = [
+  'ai/wire.js',
   'crypto.js',
   'errors.js',
   'auth/flows.js',

@@ -345,3 +345,30 @@ test('ID token checks: signature, issuer, audience, azp, expiry and nonce', asyn
   t.after(() => other.close());
   await bad({}, undefined, () => other.signJwt(good));
 });
+
+test('the hosts lookups on a ChatGPT plan: function tools, the call, then the answer with its result', async (t) => {
+  const { a, fake } = await setup(t);
+  await connectByPaste(a);
+  const tools = [{ name: 'email_search', description: 'Search mail', parameters: { type: 'object', properties: { query: { type: 'string' } } } }];
+  const first = await chat(a, { tools });
+  assert.equal(first.statusCode, 200, first.body);
+  assert.deepEqual(first.json().toolCalls, [{ id: 'call_1', name: 'email_search', args: { query: 'q4' } }]);
+  const sent = JSON.parse(responsesCalls(fake).at(-1).body);
+  assert.deepEqual(sent.tools, [{ type: 'function', name: 'email_search', description: 'Search mail', parameters: tools[0].parameters, strict: false }]);
+  assert.equal(sent.text, undefined, 'no JSON mode with tools');
+  const second = await chat(a, {
+    tools,
+    messages: [
+      { role: 'user', content: 'Who wrote about the budget?' },
+      { role: 'assistant', content: '', toolCalls: first.json().toolCalls },
+      { role: 'tool', toolCallId: 'call_1', name: 'email_search', content: 'Dana Reyes' },
+    ],
+  });
+  assert.equal(second.statusCode, 200, second.body);
+  assert.equal(second.json().text, 'found Dana Reyes');
+  const input = JSON.parse(responsesCalls(fake).at(-1).body).input;
+  assert.deepEqual(input.slice(1), [
+    { type: 'function_call', call_id: 'call_1', name: 'email_search', arguments: '{"query":"q4"}' },
+    { type: 'function_call_output', call_id: 'call_1', output: 'Dana Reyes' },
+  ]);
+});

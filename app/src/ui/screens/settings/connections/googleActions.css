@@ -1,0 +1,52 @@
+/* Connections > Google: what the hosts can do (GoogleActions.tsx). Tokens only. */
+.aw-gactions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.aw-gactions__head {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-2);
+}
+.aw-gactions__sub {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.aw-gactions__fix,
+.aw-gactions__lists {
+  flex-basis: 100%;
+  padding-left: 44px;
+}
+.aw-gactions__lists {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+.aw-gactions__label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-2);
+}
+.aw-gactions__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.aw-gactions__note {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.aw-gactions__link {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+@media (max-width: 480px) {
+  .aw-gactions__fix,
+  .aw-gactions__lists {
+    padding-left: 0;
+  }
+}

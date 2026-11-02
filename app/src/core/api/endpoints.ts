@@ -2,13 +2,15 @@
 // callers check `api.available` / `api.session` first and fall back to local data.
 import { db } from '../db/db';
 import { kvGet, kvSet } from '../db/kv';
-import type { Brain, CalendarEvent, ChatMessage, EmailSummary, InboxItem, ServerTrack, VoiceProvider } from '../types';
+import type { AgentMessage, Brain, CalendarEvent, ChatMessage, EmailSummary, InboxItem, ServerTrack, ToolCall, ToolSpec, VoiceProvider } from '../types';
 import { api, ApiError, request } from './client';
 
 export interface AiProxyRequest {
   brainId: string;
   system: string;
-  messages: ChatMessage[];
+  messages: (ChatMessage | AgentMessage)[];
+  /** the hosts' lookups (core/agent); the answer may then carry toolCalls */
+  tools?: ToolSpec[];
   json?: boolean;
   maxTokens: number;
   temperature?: number;
@@ -45,7 +47,7 @@ export const aiProxy = {
   async chat(req: AiProxyRequest, opts: { signal?: AbortSignal; brain?: Brain } = {}) {
     needSession('this brain');
     const brain = await inlineProvider('brain', req.brainId, opts.brain);
-    return request<{ text: string; model?: string }>('POST', '/api/ai/chat', { ...req, brain }, { timeoutMs: 100_000, signal: opts.signal });
+    return request<{ text: string; model?: string; toolCalls?: ToolCall[] }>('POST', '/api/ai/chat', { ...req, brain }, { timeoutMs: 100_000, signal: opts.signal });
   },
   async models(brainId: string, given?: Brain) {
     needSession('this brain');
@@ -92,7 +94,13 @@ export interface ImapSettings {
 
 export const integrations = {
   /** Google Calendar, next `hours` hours, every visible calendar. */
-  calendar: (hours = 36) => request<{ events: GoogleCalendarEvent[]; calendars: number }>('GET', `/api/google/calendar?hours=${hours}`),
+  calendar: (hours = 36) => request<{ events: GoogleCalendarEvent[]; calendars: number; timeZone?: string }>('GET', `/api/google/calendar?hours=${hours}`),
+  /** What changed since the last check (heads-ups while the radio plays): cheap, every few minutes. */
+  watch: (q: { since?: number; historyId?: string; hours?: number }) =>
+    request<{ calendar?: { changed: unknown[]; checkedAt: number }; gmail?: { historyId: string; messages: unknown[] } }>(
+      'GET',
+      `/api/google/watch?${new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]))}`,
+    ),
   /** Gmail unread, important first. */
   email: (max = 10) => request<{ messages: EmailSummary[]; unread: number }>('GET', `/api/google/gmail?max=${max}`),
   /** ICS / RSS through the server (no CORS). */

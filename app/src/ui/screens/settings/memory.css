@@ -1,0 +1,104 @@
+/* Settings > What your hosts remember */
+.aw-mem-switches {
+  display: grid;
+  gap: var(--space-2);
+}
+.aw-mem-note {
+  margin: 0;
+}
+.aw-mem-addbar {
+  display: flex;
+  justify-content: flex-start;
+}
+.aw-mem-group {
+  display: grid;
+  gap: var(--space-2);
+}
+.aw-mem-group__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-2);
+  letter-spacing: 0.01em;
+}
+.aw-mem-card__text,
+.aw-mem-j__text {
+  display: block;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.aw-mem-card__text {
+  font-weight: var(--weight-medium);
+}
+.aw-mem-card__pin {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--accent-2);
+}
+.aw-mem-card__actions {
+  gap: var(--space-1);
+}
+.aw-mem-card--editing {
+  display: block;
+}
+.aw-mem-edit,
+.aw-mem-add {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+.aw-mem-add {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.aw-mem-edit__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.aw-mem-edit__row .aw-field,
+.aw-mem-edit__row select {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.aw-mem-edit__count {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.aw-mem-j .aw-acct-row__sub {
+  font-variant-numeric: tabular-nums;
+}
+.aw-mem-forget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* the note under the call-in sheet */
+.aw-callin-remembered {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--ok-soft);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.aw-callin-remembered svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--ok);
+}

@@ -319,6 +319,69 @@ export const MIGRATIONS = [
       CREATE UNIQUE INDEX notion_activity_ref ON notion_activity(user_id, ref) WHERE ref IS NOT NULL;
     `,
   },
+  {
+    id: 9,
+    name: 'what the hosts looked up',
+    sql: `
+      -- Every lookup a host made for the listener (agent tools): what was read, when, by which host, why. Shown in the
+      -- app (Settings, What your hosts can see, Lookups), counted for the daily caps, kept 30 days, goes with the account.
+      -- where_ran: server (this server ran it) | device (the app ran it and reported it).
+      CREATE TABLE agent_lookups (
+        id INTEGER PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        at INTEGER NOT NULL,
+        tool TEXT NOT NULL,
+        what TEXT NOT NULL,
+        host TEXT,
+        purpose TEXT,
+        ok INTEGER NOT NULL DEFAULT 1,
+        ms INTEGER,
+        cost_micros INTEGER NOT NULL DEFAULT 0,
+        where_ran TEXT NOT NULL DEFAULT 'server'
+      );
+      CREATE INDEX agent_lookups_user ON agent_lookups(user_id, at);
+    `,
+  },
+  {
+    id: 10,
+    name: 'actions the listener confirmed',
+    sql: `
+      -- What the hosts proposed to do in the listener's Google account (add an event, a task, answer an invitation)
+      -- and what happened: proposed -> confirmed -> executing -> done | failed; proposed -> cancelled | expired;
+      -- done -> undone. enc is sealed (aad action:<user>:<id>): { payload, summary, others, said, context, result,
+      -- undo }. The confirmation token is stored as its sha256 only. Kept 90 days, goes with the account.
+      CREATE TABLE actions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        level INTEGER NOT NULL,
+        origin TEXT NOT NULL,
+        status TEXT NOT NULL,
+        enc TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        ref TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        confirmed_at INTEGER,
+        confirmed_via TEXT,
+        token_hash TEXT,
+        token_expires_at INTEGER,
+        token_used_at INTEGER,
+        executed_at INTEGER,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        error_code TEXT,
+        error_message TEXT,
+        undoable INTEGER NOT NULL DEFAULT 0,
+        undo_started_at INTEGER,
+        undone_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX actions_user ON actions(user_id, created_at);
+      CREATE INDEX actions_used ON actions(user_id, token_used_at);
+      CREATE INDEX actions_created ON actions(created_at);
+      CREATE UNIQUE INDEX actions_ref ON actions(user_id, ref) WHERE ref IS NOT NULL;
+    `,
+  },
 ];
 
 /** Applies pending migrations in order, each in its own transaction. Returns the ids applied. */

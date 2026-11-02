@@ -1,5 +1,6 @@
 // Minimal iCalendar (ICS) reader: VEVENTs with times, all-day dates, TZID and simple RRULEs, for a time window.
-import type { CalendarEvent } from '../types';
+import type { CalendarEvent, RsvpStatus } from '../types';
+import { cleanText, personName, providerOf, recurrenceWords, videoIn } from './details';
 
 interface Prop {
   name: string;
@@ -25,6 +26,50 @@ function parseLine(line: string): Prop | undefined {
 
 export function unescapeText(v: string): string {
   return v.replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim();
+}
+
+/** Text with its line breaks kept (descriptions). */
+const unescapeLines = (v: string) => v.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1').trim();
+
+const PARTSTAT: Record<string, RsvpStatus> = { ACCEPTED: 'accepted', DECLINED: 'declined', TENTATIVE: 'tentative', 'NEEDS-ACTION': 'needsAction' };
+
+/** The details of a VEVENT: description, organizer, guests and answers, video call, attachments, how it repeats. */
+export function icsDetails(props: Prop[]): Partial<CalendarEvent> {
+  const get = (n: string) => props.find((p) => p.name === n);
+  const all = (n: string) => props.filter((p) => p.name === n);
+  const out: Partial<CalendarEvent> = {};
+  const rawDesc = get('X-ALT-DESC')?.value ?? get('DESCRIPTION')?.value ?? '';
+  const { text, links } = cleanText(unescapeLines(rawDesc), 400);
+  if (text) out.description = text;
+  const location = get('LOCATION') ? unescapeText(get('LOCATION')!.value) : '';
+  const url = get('URL')?.value;
+  const video = videoIn(get('X-GOOGLE-CONFERENCE')?.value, location, unescapeLines(rawDesc), url);
+  if (video) out.video = video;
+  const other = [...links, ...(url && !providerOf(url) ? [{ url }] : [])].filter((l) => !providerOf(l.url));
+  if (other.length) out.links = other.slice(0, 4);
+  const org = get('ORGANIZER');
+  if (org) out.organizer = personName(org.params.CN, org.value);
+  const people = all('ATTENDEE').filter((a) => !/^(ROOM|RESOURCE)$/i.test(a.params.CUTYPE ?? ''));
+  if (people.length) {
+    out.guests = people.length;
+    out.attendees = people.slice(0, 12).map((a) => ({
+      name: personName(a.params.CN, a.value),
+      status: PARTSTAT[(a.params.PARTSTAT ?? '').toUpperCase()] ?? 'needsAction',
+      ...(org && a.value.toLowerCase() === org.value.toLowerCase() ? { organizer: true } : {}),
+      ...(/OPT-PARTICIPANT/i.test(a.params.ROLE ?? '') ? { optional: true } : {}),
+    }));
+  }
+  const rooms = all('ATTENDEE').filter((a) => /^(ROOM|RESOURCE)$/i.test(a.params.CUTYPE ?? '')).map((a) => a.params.CN).filter((n): n is string => Boolean(n));
+  if (rooms.length) out.rooms = rooms.slice(0, 3);
+  const files = all('ATTACH').map((a) => a.params.FILENAME ?? a.params['X-FILENAME']).filter((n): n is string => Boolean(n));
+  if (files.length) out.attachments = files.slice(0, 6);
+  const rec = recurrenceWords(get('RRULE')?.value);
+  if (rec) out.recurrence = rec;
+  const modified = parseIcsDate(get('LAST-MODIFIED')?.value ?? get('DTSTAMP')?.value ?? '')?.at;
+  if (modified) out.updated = modified;
+  const uid = get('UID')?.value;
+  if (uid) out.uid = uid;
+  return out;
 }
 
 /** Offset (ms) of `timeZone` from UTC at `utcMs`. */
@@ -137,6 +182,7 @@ export function parseIcs(text: string, from: number, to: number): CalendarEvent[
       const end = endP && readIcsTime(endP.value, endP.params);
       const length = end ? end.wall - start.wall : start.allDay ? DAY_MS : 3_600_000;
       const uid = get('UID')?.value ?? `${start.wall}`;
+      const details = icsDetails(props);
       for (const at of occurrences(start, get('RRULE')?.value, from - length, to)) {
         if (at + length < from || at > to) continue;
         events.push({
@@ -147,6 +193,7 @@ export function parseIcs(text: string, from: number, to: number): CalendarEvent[
           allDay: start.allDay,
           location: get('LOCATION') ? unescapeText(get('LOCATION')!.value) || undefined : undefined,
           source: 'ics',
+          ...details,
         });
       }
     } else if (cur) {

@@ -51,7 +51,7 @@ function keyHash(value: string): string {
 
 /** Reads this device's syncable data (keys stripped, secretRefs filled in). */
 export async function readLocalDoc(): Promise<{ doc: SyncDoc; keys: { ref: string; value: string }[] }> {
-  const [hosts, stations, brains, voices, playlists, profile, settings] = await Promise.all([
+  const [hosts, stations, brains, voices, playlists, profile, settings, memories, tracker] = await Promise.all([
     db.hosts.toArray(),
     db.stations.toArray(),
     db.brains.toArray(),
@@ -59,6 +59,8 @@ export async function readLocalDoc(): Promise<{ doc: SyncDoc; keys: { ref: strin
     db.playlists.toArray(),
     db.profile.get(PROFILE_ID),
     db.settings.get(SETTINGS_ID),
+    db.memories.toArray(),
+    db.tracker.toArray(),
   ]);
   const keys: { ref: string; value: string }[] = [];
   const strip = <T extends Brain | VoiceProvider>(kind: 'brain' | 'voice', rec: T): T => {
@@ -78,6 +80,8 @@ export async function readLocalDoc(): Promise<{ doc: SyncDoc; keys: { ref: strin
       brains: brains.filter((b) => b.kind !== 'builtin').map((b) => strip('brain', b)), // the scripted fallback is never stored
       voices: voices.map((v) => strip('voice', v)),
       playlists: playlists.map(({ trackIds: _t, ...meta }) => meta),
+      memories,
+      tracker,
       profile,
       settings: syncedSettings,
     },
@@ -111,12 +115,12 @@ async function uploadKeys(keys: { ref: string; value: string }[]): Promise<void>
 
 /** Writes the merged doc into IndexedDB, keeping device-only fields (apiKey, trackIds, serverUrl). */
 async function applyLocal(merged: SyncDoc, local: SyncDoc): Promise<void> {
-  const tables = { hosts: db.hosts, stations: db.stations, brains: db.brains, voices: db.voices, playlists: db.playlists };
+  const tables = { hosts: db.hosts, stations: db.stations, brains: db.brains, voices: db.voices, playlists: db.playlists, memories: db.memories, tracker: db.tracker };
   await db.transaction('rw', [...Object.values(tables), db.profile, db.settings], async () => {
     for (const c of COLLECTIONS) {
       const table = tables[c] as unknown as typeof db.hosts;
-      const mergedRecs = merged[c] as { id: string; updatedAt: number }[];
-      const localById = new Map((local[c] as { id: string; updatedAt: number }[]).map((r) => [r.id, r]));
+      const mergedRecs = (merged[c] ?? []) as { id: string; updatedAt: number }[];
+      const localById = new Map(((local[c] ?? []) as { id: string; updatedAt: number }[]).map((r) => [r.id, r]));
       const keep = new Set(mergedRecs.map((r) => r.id));
       const gone = [...localById.keys()].filter((id) => !keep.has(id));
       if (gone.length) await table.bulkDelete(gone);
@@ -274,7 +278,7 @@ export const sync = {
     if (!api.session) return;
     if (state.status === 'off') setState({ status: 'idle' });
     watch ??= liveQuery(async () => {
-      const [h, s, b, v, p, pr, st] = await Promise.all([
+      const [h, s, b, v, p, pr, st, m, tr] = await Promise.all([
         db.hosts.toArray(),
         db.stations.toArray(),
         db.brains.toArray(),
@@ -282,9 +286,11 @@ export const sync = {
         db.playlists.toArray(),
         db.profile.get(PROFILE_ID),
         db.settings.get(SETTINGS_ID),
+        db.memories.toArray(),
+        db.tracker.toArray(),
       ]);
       const ids = (rows: { id: string; updatedAt: number }[]) => rows.map((r) => `${r.id}@${r.updatedAt}`).sort().join(',');
-      return [ids(h), ids(s), ids(b), ids(v), ids(p), pr?.updatedAt, st?.updatedAt, b.some((x) => x.apiKey), v.some((x) => x.apiKey)].join('|');
+      return [ids(h), ids(s), ids(b), ids(v), ids(p), ids(m), ids(tr), pr?.updatedAt, st?.updatedAt, b.some((x) => x.apiKey), v.some((x) => x.apiKey)].join('|');
     }).subscribe({
       next: (fp) => {
         if (fp === lastFingerprint) return;

@@ -1,7 +1,7 @@
 {
   "name": "host-caster-desktop",
   "productName": "Host-Caster",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Host-Caster for Windows, Mac and Linux: your AI radio station",
   "private": true,
   "type": "module",

@@ -1,11 +1,18 @@
 // One fake HTTP server for every provider the server talks to: Google OAuth + APIs, X, OpenAI, Anthropic,
 // speech servers and feeds. Tests point the server's provider URLs (env) at it.
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { createGoogleWrites, inviteVariants } from './fake-google-store.js';
 
 const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
 };
+
+const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/google/${name}`, import.meta.url), 'utf8'));
+/** Real Google API shapes (scrubbed) for the hosts' lookups */
+export const FX_CAL = fixture('calendar-events.json');
+export const FX_MAIL = fixture('gmail-messages.json');
 
 async function readBody(req) {
   const chunks = [];
@@ -44,6 +51,15 @@ export async function startFakeProviders(t) {
     return out;
   };
   const authed = (req) => tokens.get(String(req.headers.authorization ?? '').replace(/^Bearer /, ''));
+  // what the actions write to (events by id, Google Tasks, "in:sent") + fault injection (fake-google-store.js); the
+  // Q4 budget review invitation (Dana organizes, the listener is a guest) keeps its fixture time while that is ahead
+  const t0 = Date.now();
+  const invited = structuredClone(FX_CAL.invited);
+  if (!(Date.parse(invited.end.dateTime) > t0 + 3_600_000)) {
+    invited.start = { dateTime: new Date(t0 + 26 * 3_600_000).toISOString(), timeZone: 'America/New_York' };
+    invited.end = { dateTime: new Date(t0 + 27 * 3_600_000).toISOString(), timeZone: 'America/New_York' };
+  }
+  const writes = createGoogleWrites({ events: [invited, ...inviteVariants(FX_CAL.invited, t0)], now: t0 });
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -99,10 +115,13 @@ export async function startFakeProviders(t) {
     }
     if (p === '/google/revoke') return json(res, 200, {});
 
+    if (writes.fixture(req, res, url, body)) return;
+
     // ---- Google APIs
     if (p.startsWith('/gapi/')) {
       const a = authed(req);
       if (!a) return json(res, 401, { error: { code: 401, message: 'Invalid Credentials' } });
+      if (await writes.serve(req, res, url, body, a.scope)) return;
       const has = (s) => a.scope.includes(s);
       const insufficient = () =>
         json(res, 403, { error: { code: 403, message: 'Request had insufficient authentication scopes.', errors: [{ reason: 'insufficientPermissions' }], status: 'PERMISSION_DENIED' } });
@@ -111,10 +130,19 @@ export async function startFakeProviders(t) {
         if (!has('calendar.readonly')) return insufficient();
         return json(res, 200, { items: [{ id: 'primary@x', summary: 'Me', primary: true }, { id: 'family@x', summary: 'Family' }, { id: 'hidden@x', summary: 'Hidden', hidden: true }] });
       }
+      const one = /^\/gapi\/calendar\/v3\/calendars\/([^/]+)\/events\/([^/]+)$/.exec(p);
+      if (one) {
+        if (!has('calendar.readonly')) return insufficient();
+        const id = decodeURIComponent(one[2]);
+        const fx = { [FX_CAL.invited.id]: FX_CAL.invited, [FX_CAL.master.id]: FX_CAL.master, [FX_CAL.instance.id]: FX_CAL.instance }[id];
+        return fx ? json(res, 200, fx) : json(res, 404, { error: { code: 404, message: 'Not Found' } });
+      }
       const ev = /^\/gapi\/calendar\/v3\/calendars\/([^/]+)\/events$/.exec(p);
       if (ev) {
         const cal = decodeURIComponent(ev[1]);
         if (cal === 'hidden@x') return json(res, 500, {});
+        const q = url.searchParams.get('q');
+        if (q) return json(res, 200, { items: cal === 'primary@x' && /budget|dana/i.test(q) ? [{ ...FX_CAL.invited, start: { dateTime: new Date(now + 26 * 3600e3).toISOString() }, end: { dateTime: new Date(now + 27 * 3600e3).toISOString() } }] : [] });
         const items =
           cal === 'primary@x'
             ? [
@@ -125,9 +153,36 @@ export async function startFakeProviders(t) {
             : [{ id: 'f1', summary: 'Birthday', start: { date: new Date(now + 86400e3).toISOString().slice(0, 10) }, end: { date: new Date(now + 2 * 86400e3).toISOString().slice(0, 10) } }];
         return json(res, 200, { items });
       }
+      // the heads-up watch: where the mailbox is now, and what arrived since (m1 a promotion, m2 important)
+      if (p === '/gapi/gmail/v1/users/me/profile') {
+        if (!has('gmail.readonly')) return insufficient();
+        return json(res, 200, { emailAddress: 'gina@example.com', historyId: '100' });
+      }
+      if (p === '/gapi/gmail/v1/users/me/history') {
+        if (!has('gmail.readonly')) return insufficient();
+        if (Number(url.searchParams.get('startHistoryId')) < 50) return json(res, 404, { error: { code: 404, message: 'Requested entity was not found.' } });
+        const added = [
+          { message: { id: 'm1', labelIds: ['UNREAD', 'INBOX', 'CATEGORY_PROMOTIONS'] } },
+          { message: { id: 'm2', labelIds: ['UNREAD', 'INBOX', 'IMPORTANT'] } },
+          { message: { id: 'm3', labelIds: ['SENT'] } },
+        ];
+        return json(res, 200, { historyId: '105', history: [{ id: '101', messagesAdded: added }] });
+      }
       if (p === '/gapi/gmail/v1/users/me/messages') {
         if (!has('gmail.readonly')) return insufficient();
+        if (/budget/i.test(url.searchParams.get('q') ?? '')) return json(res, 200, { messages: [{ id: FX_MAIL.dana.id }, { id: FX_MAIL.invite.id }], resultSizeEstimate: 2 });
         return json(res, 200, { messages: [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }], resultSizeEstimate: 3 });
+      }
+      const fxMsg = /^\/gapi\/gmail\/v1\/users\/me\/messages\/([0-9a-f]{16})$/.exec(p);
+      if (fxMsg) {
+        const m = Object.values(FX_MAIL).find((x) => x?.id === fxMsg[1]);
+        return m ? json(res, 200, m) : json(res, 404, { error: { code: 404, message: 'Not Found' } });
+      }
+      const fxThread = /^\/gapi\/gmail\/v1\/users\/me\/threads\/([0-9a-f]{16})$/.exec(p);
+      if (fxThread) {
+        if (fxThread[1] !== FX_MAIL.thread.id) return json(res, 404, { error: { code: 404, message: 'Not Found' } });
+        if (url.searchParams.get('format') === 'minimal') return json(res, 200, { messages: FX_MAIL.thread.messages.map((m) => ({ id: m.id })) });
+        return json(res, 200, FX_MAIL.thread);
       }
       const msg = /^\/gapi\/gmail\/v1\/users\/me\/messages\/(m\d)$/.exec(p);
       if (msg) {
@@ -195,6 +250,16 @@ export async function startFakeProviders(t) {
     }
     if (p === '/x/revoke') return json(res, 200, { revoked: true });
 
+    // ---- pages the hosts open, and a SearXNG
+    if (p === '/page/article') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end('<html><head><title>Vendor prices rise 4% | Example News</title><meta property="og:site_name" content="Example News"></head><body><nav>Home | World | Sign up for our newsletter</nav><article><h1>Vendor prices rise 4%</h1><p>Office suppliers raised prices by about four percent this quarter, the trade group said on Friday.</p><p>Analysts expect the increase to hold through the first quarter of next year as shipping costs stay high.</p></article><footer>All rights reserved</footer><script>track()</script></body></html>');
+    }
+    if (p === '/page/private') return json(res, 401, { error: 'sign in' });
+    if (p === '/searx/search') {
+      return json(res, 200, { results: [{ title: 'Q4 budgets: what to expect', url: 'https://news.example.com/q4', content: 'Most firms plan flat budgets.' }, { title: 'Second', url: 'https://b.example.com/', content: 'More.' }] });
+    }
+
     // ---- OpenAI-compatible chat
     if (p === '/openai/v1/chat/completions') {
       const b = JSON.parse(body);
@@ -205,6 +270,15 @@ export async function startFakeProviders(t) {
       // a small local model that loops in JSON mode, and one that thinks out loud first
       if (b.model === 'loopy' && b.response_format) return json(res, 500, { error: { message: 'prediction aborted, token repeat limit reached' } });
       if (b.model === 'thinker') return json(res, 200, { model: b.model, choices: [{ message: { role: 'assistant', content: '<think>what to say</think>Hello there' } }] });
+      // tools: 'notools' is a model without them (Ollama's words); 'tooler' asks for the first tool once, then answers
+      if (b.tools && b.model === 'notools') return json(res, 400, { error: { message: 'registry.ollama.ai/library/notools does not support tools' } });
+      if (b.tools && b.model === 'tooler') {
+        const last = b.messages[b.messages.length - 1];
+        if (last.role !== 'tool') {
+          return json(res, 200, { model: b.model, choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: b.tools[0].function.name, arguments: '{"query":"budget"}' } }] } }] });
+        }
+        return json(res, 200, { model: b.model, choices: [{ message: { role: 'assistant', content: `found:${last.tool_call_id}:${last.content.slice(0, 20)}` } }] });
+      }
       const sys = b.messages[0];
       return json(res, 200, { model: b.model, choices: [{ message: { role: 'assistant', content: b.response_format ? '{"lines":[]}' : `ok:${sys.role}:${b.messages.length}` } }] });
     }
@@ -212,6 +286,12 @@ export async function startFakeProviders(t) {
     if (p === '/anthropic/v1/messages') {
       if (req.headers['x-api-key'] !== 'sk-ant-good') return json(res, 401, { error: { message: 'invalid x-api-key' } });
       const b = JSON.parse(body);
+      if (b.tools) {
+        const last = b.messages[b.messages.length - 1];
+        const result = Array.isArray(last.content) ? last.content.find((c) => c.type === 'tool_result') : undefined;
+        if (!result) return json(res, 200, { model: b.model, stop_reason: 'tool_use', content: [{ type: 'text', text: 'Let me check.' }, { type: 'tool_use', id: 'toolu_1', name: b.tools[0].name, input: { query: 'budget' } }] });
+        return json(res, 200, { model: b.model, content: [{ type: 'text', text: `claude-found:${result.tool_use_id}:${String(result.content).slice(0, 20)}` }] });
+      }
       return json(res, 200, { model: b.model, content: [{ type: 'text', text: `claude:${b.messages[0].role}:${b.system.length > 0}` }] });
     }
     if (p === '/anthropic/v1/models') return json(res, 200, { data: [{ id: 'claude-x' }] });
@@ -276,5 +356,7 @@ export async function startFakeProviders(t) {
     X_REVOKE_URL: `${base}/x/revoke`,
     X_API_BASE: `${base}/x`,
   };
-  return { base, port, env, log, state };
+  /** the scopes granted to an access token ("Bearer at-..."), for stand-ins that proxy their sign-in to this fake */
+  const scopeOf = (authorization) => tokens.get(String(authorization ?? '').replace(/^Bearer /, ''))?.scope;
+  return { base, port, env, log, state, writes, scopeOf };
 }

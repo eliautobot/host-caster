@@ -32,6 +32,7 @@ export const screens: ScreenDef[] = [
   { path: '/library/search', title: 'Search', nav: 'library', screen: lazy(() => import('./LibrarySearch')) },
   { path: '/services/spotify/callback', title: 'Spotify', nav: 'settings', screen: lazy(() => import('./services/SpotifyCallback')) },
   { path: '/services/:kind', title: 'Music services', nav: 'library', screen: lazy(() => import('./services/ServiceBrowse')) },
+  { path: '/list', title: 'Your list', nav: 'list', screen: lazy(() => import('./YourList')) },
   { path: '/on-air', title: 'On-air history', nav: 'home', screen: lazy(() => import('./OnAirHistory')) },
   { path: '/hosts', title: 'Hosts', nav: 'hosts', screen: lazy(() => import('./Hosts')) },
   { path: '/hosts/:id', title: 'Host', nav: 'hosts', screen: lazy(() => import('./HostEdit')) },

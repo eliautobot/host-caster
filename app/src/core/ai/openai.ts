@@ -8,11 +8,11 @@ interface ChatResponse {
 }
 
 /** Ollama: thinking models (gemma4, qwen3, deepseek-r1) answer at once with reasoning_effort "none". */
-function isOllama(brain: Brain): boolean {
+export function isOllama(brain: Brain): boolean {
   return brain.preset === 'ollama' || /:11434(\/|$)/.test(brain.baseUrl ?? '');
 }
 
-function headers(brain: Brain): Record<string, string> {
+export function headers(brain: Brain): Record<string, string> {
   const h: Record<string, string> = {};
   if (brain.apiKey) h.Authorization = `Bearer ${brain.apiKey}`;
   if (brain.preset === 'openrouter') {

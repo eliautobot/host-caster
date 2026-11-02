@@ -1,0 +1,281 @@
+{
+  "_note": "Real Google Calendar API v3 shapes (test account, scrubbed: addresses, ids of people, links). Instance = singleEvents=true. 'invited' = the same real shape with guests, organizer and attachments filled in by hand (the test account never invites other people).",
+  "master": {
+    "conferenceData": {
+      "conferenceId": "abc-defg-hij",
+      "conferenceSolution": {
+        "iconUri": "https://fonts.gstatic.com/s/i/productlogos/meet_2020q4/v6/web-512dp/logo_meet_2020q4_color_2x_web_512dp.png",
+        "key": {
+          "type": "hangoutsMeet"
+        },
+        "name": "Google Meet"
+      },
+      "createRequest": {
+        "conferenceSolutionKey": {
+          "type": "hangoutsMeet"
+        },
+        "requestId": "req-1",
+        "status": {
+          "statusCode": "success"
+        }
+      },
+      "entryPoints": [
+        {
+          "entryPointType": "video",
+          "label": "meet.google.com/abc-defg-hij",
+          "uri": "https://meet.google.com/abc-defg-hij"
+        }
+      ]
+    },
+    "created": "2026-11-01T14:52:44.000Z",
+    "creator": {
+      "email": "me@example.com",
+      "self": true
+    },
+    "description": "<b>Agenda</b><br>1. Vendor numbers<br>2. Q4 plan<br><a href=\"https://docs.example.com/q4\">Q4 plan doc</a>&nbsp;and more",
+    "end": {
+      "dateTime": "2026-11-09T20:00:00Z",
+      "timeZone": "America/New_York"
+    },
+    "etag": "\"3587089529878398\"",
+    "eventType": "default",
+    "hangoutLink": "https://meet.google.com/abc-defg-hij",
+    "htmlLink": "https://www.google.com/calendar/event?eid=FIXTUREEID",
+    "iCalUID": "abc0demo0event0q4r0001@google.com",
+    "id": "abc0demo0event0q4r0001",
+    "kind": "calendar#event",
+    "location": "Room 4B",
+    "organizer": {
+      "email": "me@example.com",
+      "self": true
+    },
+    "recurrence": [
+      "RRULE:FREQ=WEEKLY;COUNT=3"
+    ],
+    "reminders": {
+      "useDefault": true
+    },
+    "start": {
+      "dateTime": "2026-11-09T19:00:00Z",
+      "timeZone": "America/New_York"
+    },
+    "status": "confirmed",
+    "summary": "HC fixture: Q4 budget review",
+    "updated": "2026-11-01T14:52:44.939Z"
+  },
+  "instance": {
+    "conferenceData": {
+      "conferenceId": "abc-defg-hij",
+      "conferenceSolution": {
+        "iconUri": "https://fonts.gstatic.com/s/i/productlogos/meet_2020q4/v6/web-512dp/logo_meet_2020q4_color_2x_web_512dp.png",
+        "key": {
+          "type": "hangoutsMeet"
+        },
+        "name": "Google Meet"
+      },
+      "createRequest": {
+        "conferenceSolutionKey": {
+          "type": "hangoutsMeet"
+        },
+        "requestId": "req-1",
+        "status": {
+          "statusCode": "success"
+        }
+      },
+      "entryPoints": [
+        {
+          "entryPointType": "video",
+          "label": "meet.google.com/abc-defg-hij",
+          "uri": "https://meet.google.com/abc-defg-hij"
+        }
+      ]
+    },
+    "created": "2026-11-01T14:52:44.000Z",
+    "creator": {
+      "email": "me@example.com",
+      "self": true
+    },
+    "description": "<b>Agenda</b><br>1. Vendor numbers<br>2. Q4 plan<br><a href=\"https://docs.example.com/q4\">Q4 plan doc</a>&nbsp;and more",
+    "end": {
+      "dateTime": "2026-11-09T20:00:00Z",
+      "timeZone": "America/New_York"
+    },
+    "etag": "\"3587089531210590\"",
+    "eventType": "default",
+    "hangoutLink": "https://meet.google.com/abc-defg-hij",
+    "htmlLink": "https://www.google.com/calendar/event?eid=FIXTUREEID",
+    "iCalUID": "abc0demo0event0q4r0001@google.com",
+    "id": "abc0demo0event0q4r0001_20261109T190000Z",
+    "kind": "calendar#event",
+    "location": "Room 4B",
+    "organizer": {
+      "email": "me@example.com",
+      "self": true
+    },
+    "originalStartTime": {
+      "dateTime": "2026-11-09T19:00:00Z",
+      "timeZone": "America/New_York"
+    },
+    "recurringEventId": "abc0demo0event0q4r0001",
+    "reminders": {
+      "useDefault": true
+    },
+    "start": {
+      "dateTime": "2026-11-09T19:00:00Z",
+      "timeZone": "America/New_York"
+    },
+    "status": "confirmed",
+    "summary": "HC fixture: Q4 budget review",
+    "updated": "2026-11-01T14:52:45.605Z"
+  },
+  "withAttendee": {
+    "attendees": [
+      {
+        "email": "me@example.com",
+        "responseStatus": "accepted"
+      }
+    ],
+    "created": "2026-10-30T19:55:42.000Z",
+    "creator": {
+      "email": "me@example.com",
+      "self": true
+    },
+    "description": "Bring the insurance card. Arrive 10 minutes early.",
+    "end": {
+      "dateTime": "2026-12-07T14:30:00Z",
+      "timeZone": "America/New_York"
+    },
+    "etag": "\"3586780466199902\"",
+    "eventType": "default",
+    "htmlLink": "https://www.google.com/calendar/event?eid=FIXTUREEID",
+    "iCalUID": "abc0demo0event0q4r0001@google.com",
+    "id": "8d2mq2pdu2036qjakfmhd0gbrk",
+    "kind": "calendar#event",
+    "organizer": {
+      "email": "me@example.com",
+      "self": true
+    },
+    "reminders": {
+      "overrides": [
+        {
+          "method": "popup",
+          "minutes": 60
+        },
+        {
+          "method": "popup",
+          "minutes": 1440
+        },
+        {
+          "method": "email",
+          "minutes": 1440
+        }
+      ]
+    },
+    "start": {
+      "dateTime": "2026-12-07T14:00:00Z",
+      "timeZone": "America/New_York"
+    },
+    "status": "confirmed",
+    "summary": "Dentist check-up",
+    "updated": "2026-10-30T19:58:44.019Z"
+  },
+  "invited": {
+    "conferenceData": {
+      "conferenceId": "abc-defg-hij",
+      "conferenceSolution": {
+        "iconUri": "https://fonts.gstatic.com/s/i/productlogos/meet_2020q4/v6/web-512dp/logo_meet_2020q4_color_2x_web_512dp.png",
+        "key": {
+          "type": "hangoutsMeet"
+        },
+        "name": "Google Meet"
+      },
+      "createRequest": {
+        "conferenceSolutionKey": {
+          "type": "hangoutsMeet"
+        },
+        "requestId": "req-1",
+        "status": {
+          "statusCode": "success"
+        }
+      },
+      "entryPoints": [
+        {
+          "entryPointType": "video",
+          "label": "meet.google.com/abc-defg-hij",
+          "uri": "https://meet.google.com/abc-defg-hij"
+        }
+      ]
+    },
+    "created": "2026-11-01T14:52:44.000Z",
+    "creator": {
+      "email": "dana@example.com",
+      "displayName": "Dana Reyes"
+    },
+    "description": "<b>Agenda</b><br>1. Vendor numbers<br>2. Q4 plan<br><a href=\"https://docs.example.com/q4\">Q4 plan doc</a>&nbsp;and more",
+    "end": {
+      "dateTime": "2026-11-09T20:00:00Z",
+      "timeZone": "America/New_York"
+    },
+    "etag": "\"3587089531210590\"",
+    "eventType": "default",
+    "hangoutLink": "https://meet.google.com/abc-defg-hij",
+    "htmlLink": "https://www.google.com/calendar/event?eid=FIXTUREEID",
+    "iCalUID": "q4review7nkl3lnqohsgg9inv@google.com",
+    "id": "q4review7nkl3lnqohsgg9inv",
+    "kind": "calendar#event",
+    "location": "Room 4B",
+    "organizer": {
+      "email": "dana@example.com",
+      "displayName": "Dana Reyes"
+    },
+    "reminders": {
+      "useDefault": true
+    },
+    "start": {
+      "dateTime": "2026-11-09T19:00:00Z",
+      "timeZone": "America/New_York"
+    },
+    "status": "confirmed",
+    "summary": "HC fixture: Q4 budget review",
+    "updated": "2026-11-01T14:52:45.605Z",
+    "attendees": [
+      {
+        "email": "dana@example.com",
+        "displayName": "Dana Reyes",
+        "organizer": true,
+        "responseStatus": "accepted"
+      },
+      {
+        "email": "mike.chen@example.com",
+        "responseStatus": "accepted"
+      },
+      {
+        "email": "priya@example.com",
+        "displayName": "Priya Shah",
+        "responseStatus": "tentative",
+        "optional": true
+      },
+      {
+        "email": "me@example.com",
+        "self": true,
+        "responseStatus": "needsAction"
+      },
+      {
+        "email": "c_1883abc@resource.calendar.google.com",
+        "displayName": "Room 4B",
+        "resource": true,
+        "responseStatus": "accepted"
+      }
+    ],
+    "attachments": [
+      {
+        "fileUrl": "https://drive.google.com/open?id=FIXTUREFILE",
+        "title": "Q4 vendor quotes.xlsx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "iconLink": "https://drive-thirdparty.googleusercontent.com/16/type/application/vnd.ms-excel",
+        "fileId": "FIXTUREFILE"
+      }
+    ],
+    "guestsCanModify": false
+  }
+}

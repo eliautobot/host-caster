@@ -25,6 +25,7 @@ import type { ScreenProps } from '.';
 import './Home.css';
 import { UsageBanner } from '../online/parts';
 import { FallbackBanner, NoAiLine } from '../radio/fallback';
+import { HomeList } from '../list/HomeList';
 
 /** External links open in the system browser on the phone app. */
 function openOut(e: { preventDefault: () => void }, url: string) {
@@ -147,6 +148,8 @@ export default function Home(_: ScreenProps) {
           </div>
         </section>
       )}
+
+      <HomeList />
 
       {recent && recent.length > 0 && (
         <section className="aw-home__section">

@@ -25,6 +25,12 @@ function bool(value, fallback) {
   return /^(1|true|yes|on)$/i.test(String(value).trim());
 }
 
+/** "400,1200": the pauses before the 2nd and 3rd try of an action Google did not answer */
+function backoffFrom(value) {
+  const ms = list(value).map(Number);
+  return ms.length === 2 && ms.every((n) => Number.isFinite(n) && n >= 0) ? ms : [400, 1200];
+}
+
 const list = (value) =>
   String(value ?? '')
     .split(/[\s,]+/)
@@ -118,6 +124,22 @@ function providerUrls(env) {
 /**
  * @param {Record<string, string | undefined>} env
  */
+/**
+ * Web search for the hosts. Online: Host-Caster AI's own (OpenRouter, metered per user). Self-hosted: the operator's
+ * SearXNG (SEARXNG_URL), Brave Search (BRAVE_SEARCH_API_KEY) or Tavily (TAVILY_API_KEY); WEB_SEARCH_PROVIDER picks one
+ * when several are set; none = the hosts are simply not offered web search.
+ */
+export function webSearchFrom(env, online) {
+  if (online) return Object.freeze({ provider: 'hostcaster' });
+  const searxngUrl = trimSlash(env.SEARXNG_URL ?? '');
+  const braveKey = env.BRAVE_SEARCH_API_KEY ?? '';
+  const tavilyKey = env.TAVILY_API_KEY ?? '';
+  const have = { searxng: Boolean(searxngUrl), brave: Boolean(braveKey), tavily: Boolean(tavilyKey) };
+  const wanted = String(env.WEB_SEARCH_PROVIDER ?? '').trim().toLowerCase();
+  const provider = wanted === 'off' ? '' : have[wanted] ? wanted : ['searxng', 'brave', 'tavily'].find((p) => have[p]) ?? '';
+  return Object.freeze({ provider, searxngUrl, braveKey, tavilyKey });
+}
+
 export function loadConfig(env = process.env) {
   const port = Number(env.PORT ?? 8660);
   const dataDir = resolve(env.DATA_DIR ?? './data');
@@ -184,6 +206,23 @@ export function loadConfig(env = process.env) {
     allowPrivateFetch: online.enabled ? false : bool(env.ALLOW_PRIVATE_FETCH, false),
     /** extra ranges/hosts user-supplied URLs may reach: CIDRs, IPs, host names or host:port (ignored online) */
     fetchAllow: Object.freeze(online.enabled ? [] : list(env.FETCH_ALLOW)),
+    /** the hosts' lookups (agent tools): caps per account and day, and the web search provider */
+    agent: Object.freeze({
+      lookupsPerDay: Math.max(1, Number(env.AGENT_LOOKUPS_PER_DAY ?? 400) || 400),
+      webSearchesPerDay: Math.max(0, Number(env.AGENT_WEB_SEARCHES_PER_DAY ?? 40) || 0),
+      search: webSearchFrom(env, online.enabled),
+    }),
+    /** what the hosts may do in the listener's Google account, only after they confirm (actions/) */
+    actions: Object.freeze({
+      perDay: Math.max(1, Number(env.ACTIONS_PER_DAY ?? 50) || 50),
+      proposalsPerDay: Math.max(1, Number(env.ACTION_PROPOSALS_PER_DAY ?? 200) || 200),
+      /** test knobs: how long a proposal and a confirmation token live, Google's answer time, the retry pauses */
+      proposalTtlMs: Math.max(50, Number(env.ACTIONS_PROPOSAL_TTL_MS ?? 600_000) || 600_000),
+      tokenTtlMs: Math.max(50, Number(env.ACTIONS_TOKEN_TTL_MS ?? 120_000) || 120_000),
+      googleTimeoutMs: Math.max(100, Number(env.ACTIONS_GOOGLE_TIMEOUT_MS ?? 10_000) || 10_000),
+      backoffMs: Object.freeze(backoffFrom(env.ACTIONS_BACKOFF_MS)),
+      retryAfterCapMs: 3000,
+    }),
     appScheme: env.APP_SCHEME ?? 'hostcaster',
     /** optional; the Spotify integration in the client uses PKCE and only needs the public client id */
     spotifyClientId: env.SPOTIFY_CLIENT_ID ?? '',

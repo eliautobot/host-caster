@@ -5,7 +5,10 @@ import type {
   Brain,
   Break,
   Host,
+  JournalEntry,
   KvRecord,
+  MemoryCard,
+  TrackedItem,
   Playlist,
   Profile,
   Settings,
@@ -28,6 +31,9 @@ export class HostCasterDB extends Dexie {
   profile!: Table<Profile, string>;
   settings!: Table<Settings, string>;
   kv!: Table<KvRecord, string>;
+  memories!: Table<MemoryCard, string>;
+  tracker!: Table<TrackedItem, string>;
+  journal!: Table<JournalEntry, string>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -44,6 +50,15 @@ export class HostCasterDB extends Dexie {
       profile: 'id',
       settings: 'id',
       kv: 'id, fetchedAt',
+    });
+    // memory (core/memory): the cards the hosts remember (synced) and the 14-day journal (this device only)
+    this.version(2).stores({
+      memories: 'id, kind, updatedAt',
+      journal: 'id, day, at, kind',
+    });
+    // Your list (core/tracker): tasks, events, bills and invitations the hosts keep track of (synced)
+    this.version(3).stores({
+      tracker: 'id, status, kind, key, updatedAt',
     });
   }
 }

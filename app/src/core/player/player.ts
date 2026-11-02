@@ -198,8 +198,11 @@ export class Player {
   async next(): Promise<void> {
     if (this.holds.running) {
       this.holds.abort('skip');
+      this.emitter.emit('breakskip', undefined);
       return;
     }
+    const s = this._state;
+    if (s.track && !s.live) this.emitter.emit('userskip', { track: s.track, positionMs: s.positionMs, durationMs: s.durationMs });
     await this.advance(false);
   }
 

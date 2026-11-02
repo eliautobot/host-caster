@@ -9,6 +9,7 @@ import { startRadioStore } from './radio';
 import { startSessionStore } from './session';
 import { startSettingsStore } from './settings';
 import { startStationsStore } from './stations';
+import { startTrackerStore } from './tracker';
 
 let started = false;
 
@@ -26,6 +27,7 @@ export function startStores(): void {
     startRadioStore,
     startSessionStore,
     startDesktopStore,
+    startTrackerStore,
   ]) {
     start();
   }
@@ -41,3 +43,4 @@ export { useBrains } from './brains';
 export { usePlayer } from './player';
 export { useRadio } from './radio';
 export { useSession, useSignedIn } from './session';
+export { useTracker } from './tracker';

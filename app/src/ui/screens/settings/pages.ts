@@ -2,7 +2,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import { AudioLines, BrainCircuit, Database, Palette, Plug, UserRound, Contact, type LucideIcon } from 'lucide-react';
 import { Headphones, ListMusic } from 'lucide-react';
-import { Eye, Monitor, Smartphone } from 'lucide-react';
+import { BookHeart, Eye, Monitor, Smartphone } from 'lucide-react';
 import { desktopOsName, isDesktop, isNative, sellsPlans } from '@/core/native';
 import { CreditCard, ShieldCheck } from 'lucide-react';
 import { api, isOnline } from '@/core/api';
@@ -33,6 +33,8 @@ export const settingsPages: SettingsPageDef[] = [
     group: 'App' as const, screen: lazy(adminScreen), visible: () => isOnline() && Boolean(api.session?.user.admin) }] : []),
   { id: 'about-me', title: 'About me', description: 'What your hosts know about you', icon: Contact, group: 'You',
     screen: lazy(() => import('./AboutMe')) },
+  { id: 'memory', title: 'What your hosts remember', description: 'What they learned about you, and what happened lately', icon: BookHeart,
+    group: 'You', screen: lazy(() => import('./Memory')) },
   { id: 'brains', title: 'Brains', description: 'AI models your hosts think with', icon: BrainCircuit, group: 'Radio',
     screen: lazy(() => import('./Brains')) },
   { id: 'voices', title: 'Voices', description: 'Speech engines and voices', icon: AudioLines, group: 'Radio',
