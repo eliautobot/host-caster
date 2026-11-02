@@ -69,7 +69,8 @@ Screenshots from a demo install with demo songs.
 - Subsonic and Navidrome servers.
 - Tens of thousands of internet radio stations (radio-browser.info), or any stream address.
 - YouTube playlists, Liked videos and search with your own Google sign-in setup ([docs/YOUTUBE.md](docs/YOUTUBE.md)),
-  played in YouTube's own player.
+  played in YouTube's own player: in the apps a small video window that docks out of the way (never over the app),
+  shrinks to 200x200 or closes (then your other music plays and the YouTube songs wait until you show it again).
 - Spotify playlists and Liked Songs (Premium): plays in a desktop browser, or remote-controls your Spotify app.
 - **Any music app mode** on Android: keep listening in YouTube Music, Apple Music or anything else, and your hosts
   break in between its songs.
