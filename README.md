@@ -85,6 +85,21 @@ Screenshots from a demo install with demo songs.
 - **AI apps**: connect ChatGPT, Claude and other assistants (MCP), and they can pass notes, segments, song requests
   and birthdays to your hosts.
 
+**Hosts that look things up, remember and help**
+- **They do their homework**: the hosts read the full details behind your day (what an invitation is about, who is
+  coming, the email it came with, the article behind a headline) and keep a short brief on each, so you can call in
+  with a follow-up ("who's coming?", "read me Dana's email") and get a real answer. Every lookup is listed in the app.
+- **Heads-ups**: when a meeting is cancelled or moved or an urgent email arrives while you listen, the music dips and
+  a host tells you right away; plus a reminder before meetings with other people.
+- **The time, said right**: one host tells the time in the last line of a break, made at the moment you hear it.
+- **Memory**: the hosts remember what you tell them ("my sister visits next weekend", "I'm vegetarian") and notice
+  how you listen. See, edit, pin or delete every memory in Settings, What your hosts remember.
+- **Your list**: they keep track of your to-dos, deadlines, invitations to answer, bills and deliveries, from your
+  calendar, mail, Notion and Google Tasks, and follow up on them.
+- **They do things only after your yes**: add an event to your Google Calendar, add or complete a Google Task, or
+  answer an invitation. The host reads back exactly what will happen, you say yes (or tap Yes), and every action can
+  be undone. Emails and web pages are only information to the hosts, never instructions.
+
 **A real player**
 - Crossfade, shuffle, repeat, queue, keyboard shortcuts, lock screen and notification controls, background play
   on Android and iOS, dark and light themes.
