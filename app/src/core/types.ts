@@ -14,7 +14,8 @@ export type Draft<T extends BaseRecord> = Omit<T, 'id' | 'createdAt' | 'updatedA
 // ---------------------------------------------------------------------------------------------------------------------
 // Library
 
-export type TrackSource = 'local' | 'server' | 'spotify' | 'youtube' | 'stream' | 'subsonic';
+/** 'device': a song file that stays where it is on this device (found by Find music on this device); never synced */
+export type TrackSource = 'local' | 'server' | 'spotify' | 'youtube' | 'stream' | 'subsonic' | 'device';
 
 export interface Track extends BaseRecord {
   title: string;
@@ -29,7 +30,7 @@ export interface Track extends BaseRecord {
   /** public cover URL (no credentials): synced, so another device can show the cover */
   artUrl?: string;
   source: TrackSource;
-  /** local blob id, server track id, spotify URI, YouTube videoId, stream URL or subsonic id */
+  /** local blob id, server track id, spotify URI, YouTube videoId, stream URL, subsonic id or device file ('android:<id>') */
   ref: string;
   liked?: boolean;
   playCount: number;
@@ -50,6 +51,8 @@ export interface TrackFile {
   mime: string;
   /** quick content fingerprint (size + head/tail bytes), for duplicate detection */
   hash?: string;
+  /** device songs: the file's date (epoch ms), to notice a changed file */
+  modifiedAt?: number;
 }
 
 /** Small snapshot of a track, kept in logs and context packets so they survive track deletion. */

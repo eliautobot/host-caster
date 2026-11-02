@@ -10,7 +10,17 @@
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
-  touch-action: none;
+  /* sideways drags belong to the slider (sliderGesture.ts); up/down swipes still scroll the page */
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* touch screens: a taller hit area around the same 4px track, without moving anything around it */
+@media (pointer: coarse) {
+  .aw-slider {
+    height: 36px;
+    margin-block: -8px;
+  }
 }
 
 .aw-slider::-webkit-slider-runnable-track {
@@ -95,6 +105,36 @@
 
 .aw-slider--thumb {
   --fill: var(--accent);
+}
+
+/* a finger on the slider: the thumb grows so it shows past the fingertip */
+.aw-slider--active {
+  --fill: var(--accent);
+}
+
+.aw-slider--active::-webkit-slider-thumb {
+  opacity: 1;
+  transform: scale(1.35);
+}
+
+.aw-slider--active::-moz-range-thumb {
+  opacity: 1;
+}
+
+/* no hover on touch screens: the thumb always shows, so the bar looks like something to grab */
+@media (hover: none) {
+  .aw-slider:not(:disabled, .aw-slider--thumb)::-webkit-slider-thumb {
+    opacity: 1;
+    transform: scale(0.85);
+  }
+
+  .aw-slider--active:not(:disabled)::-webkit-slider-thumb {
+    transform: scale(1.35);
+  }
+
+  .aw-slider:not(:disabled)::-moz-range-thumb {
+    opacity: 1;
+  }
 }
 
 .aw-slider:disabled {

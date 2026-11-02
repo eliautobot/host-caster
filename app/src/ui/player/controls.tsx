@@ -1,5 +1,5 @@
 // Transport, scrubber and volume shared by the desktop bar and Now Playing.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume, Volume1, Volume2, VolumeX } from 'lucide-react';
 import { player } from '@/core/player';
 import { formatDuration } from '@/core/util/time';
@@ -76,6 +76,10 @@ export function Scrubber({ variant = 'bar' }: { variant?: 'bar' | 'sheet' }) {
     ? { live: !other.durationMs, positionMs: otherAppPosition(other), durationMs: other.durationMs ?? 0, track: other }
     : own;
   const seek = (ms: number) => (other ? void runAction(() => controlOtherApp('seek', ms)) : player.seek(ms));
+  // the song the finger is on: a scrub never outlives it (a new song starts with its own bar)
+  const songKey = other ? `other:${other.key}` : (own.track?.id ?? '');
+  const scrubFor = useRef(songKey);
+  useEffect(() => setScrub(undefined), [songKey]);
   const pos = scrub ?? p.positionMs;
   if (p.live) {
     return (
@@ -96,9 +100,12 @@ export function Scrubber({ variant = 'bar' }: { variant?: 'bar' | 'sheet' }) {
       step={1000}
       disabled={!p.track}
       thumb={variant === 'sheet'}
-      onChange={setScrub}
+      onChange={(ms) => {
+        scrubFor.current = songKey;
+        setScrub(ms);
+      }}
       onCommit={(ms) => {
-        seek(ms);
+        if (scrubFor.current === songKey) seek(ms);
         setScrub(undefined);
       }}
     />

@@ -1,4 +1,4 @@
-// The HTML audio adapter: local files, the server library, internet streams and Subsonic URLs.
+// The HTML audio adapter: local files, music on the device, the server library, internet streams and Subsonic URLs.
 // Each deck owns two elements: one routed through the Web Audio graph (same-origin/blob URLs) and one plain element
 // for cross-origin URLs (radio streams send no CORS headers; routing them would play silence).
 import { resolveTrackUrl } from '../services/resolve';
@@ -6,7 +6,7 @@ import type { AdapterEvents, PlayerAdapter, Track } from '../types';
 import { createEmitter } from '../util/emitter';
 import { isRoutableUrl, rampParam, type AudioGraph } from './graph';
 
-const PLAYABLE = new Set<Track['source']>(['local', 'server', 'stream', 'subsonic']);
+const PLAYABLE = new Set<Track['source']>(['local', 'server', 'stream', 'subsonic', 'device']);
 const LOAD_TIMEOUT_MS = 20_000;
 
 function makeElement(): HTMLAudioElement {

@@ -2,6 +2,7 @@
 import { serverLibrary } from '../api';
 import { getBlob } from '../db';
 import type { Track } from '../types';
+import { deviceSongUrl } from '../library/device/url';
 import { subsonicStreamUrl } from './subsonic/store';
 
 const blobUrls = new Map<string, string>();
@@ -35,6 +36,8 @@ export async function resolveTrackUrl(track: Track): Promise<string> {
       return track.ref;
     case 'subsonic':
       return subsonicStreamUrl(track.ref);
+    case 'device':
+      return deviceSongUrl(track);
     case 'spotify':
     case 'youtube':
       throw new Error(`${track.source} tracks play through their own adapter`);

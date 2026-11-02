@@ -23,6 +23,8 @@ async function boot() {
     api.configure({ baseUrl: settings.serverUrl ?? defaultServerUrl() });
     void api.probe();
     startStores();
+    // "Keep my music up to date" (Find music on this device): looks again on start and when the app comes back
+    void import('@/core/library/device').then((m) => m.startDeviceMusic());
     root.render(
       <StrictMode>
         <App />

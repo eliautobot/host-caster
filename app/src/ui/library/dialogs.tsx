@@ -9,12 +9,14 @@ import { navigate } from '@/state/router';
 import { runAction } from '../actions';
 import { Button, Sheet, TextArea, TextField, toast } from '../components';
 import { PlaylistCover } from './covers';
+import { DeviceMusicSheet } from './DeviceMusicSheet';
 import { playTracks } from './play';
 
 type Dialog =
   | { kind: 'addToPlaylist'; tracks: Track[] }
   | { kind: 'playlist'; tracks?: Track[]; edit?: Playlist }
   | { kind: 'stream' }
+  | { kind: 'device' }
   | { kind: 'confirm'; title: string; description?: string; confirm: string; danger?: boolean; onConfirm: () => unknown };
 
 const useDialogs = create<{ dialog?: Dialog }>(() => ({}));
@@ -24,6 +26,8 @@ export const dialogs = {
   newPlaylist: (tracks?: Track[]) => useDialogs.setState({ dialog: { kind: 'playlist', tracks } }),
   editPlaylist: (edit: Playlist) => useDialogs.setState({ dialog: { kind: 'playlist', edit } }),
   addStream: () => useDialogs.setState({ dialog: { kind: 'stream' } }),
+  /** Find music on this device / Add a music folder */
+  deviceMusic: () => useDialogs.setState({ dialog: { kind: 'device' } }),
   confirm: (d: Omit<Extract<Dialog, { kind: 'confirm' }>, 'kind'>) => useDialogs.setState({ dialog: { kind: 'confirm', ...d } }),
   close: () => useDialogs.setState({ dialog: undefined }),
 };
@@ -42,6 +46,7 @@ export function LibraryDialogs() {
       <AddToPlaylistSheet open={open && d?.kind === 'addToPlaylist'} tracks={d?.kind === 'addToPlaylist' ? d.tracks : []} />
       <PlaylistSheet open={open && d?.kind === 'playlist'} d={d?.kind === 'playlist' ? d : undefined} />
       <StreamSheet open={open && d?.kind === 'stream'} />
+      <DeviceMusicSheet open={open && d?.kind === 'device'} />
       <ConfirmSheet open={open && d?.kind === 'confirm'} d={d?.kind === 'confirm' ? d : undefined} />
     </>
   );

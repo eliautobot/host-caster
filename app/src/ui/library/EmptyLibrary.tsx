@@ -1,6 +1,7 @@
 // First-run library: invites you to bring your music in.
-import { FileMusic, FolderOpen, ListMusic, Plug, Radio, Server } from 'lucide-react';
+import { FileMusic, FolderOpen, FolderSearch, ListMusic, Plug, Radio, Server } from 'lucide-react';
 import { serverLibraryAvailable } from '@/core/library';
+import { devicePlatform } from '@/core/library/device';
 import { navigate } from '@/state/router';
 import { useIsDesktop } from '../hooks/useMediaQuery';
 import { dialogs } from './dialogs';
@@ -9,8 +10,14 @@ import { syncServer, type usePickers } from './importUi';
 export function EmptyLibrary({ pickers }: { pickers: ReturnType<typeof usePickers> }) {
   const desktop = useIsDesktop();
   const server = serverLibraryAvailable();
+  const device = devicePlatform();
   const options = [
     { icon: FileMusic, title: 'Songs from this device', desc: 'MP3, M4A, FLAC, OGG, WAV', onClick: pickers.pickFiles, primary: true },
+    ...(device === 'android'
+      ? [{ icon: FolderSearch, title: 'Music on this phone', desc: 'Finds the songs already here', onClick: dialogs.deviceMusic }]
+      : device
+        ? [{ icon: FolderSearch, title: 'Your music folder', desc: 'Plays from where it is, kept up to date', onClick: dialogs.deviceMusic }]
+        : []),
     ...(pickers.canPickFolder ? [{ icon: FolderOpen, title: 'A whole folder', desc: 'Keeps albums and playlists', onClick: pickers.pickFolder }] : []),
     { icon: Plug, title: 'Music services', desc: 'Spotify, YouTube Music, Subsonic', onClick: () => navigate('/settings/music-services') },
     { icon: Radio, title: 'Internet radio', desc: 'Any stream address', onClick: dialogs.addStream },

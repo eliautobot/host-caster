@@ -32,6 +32,13 @@ if (boot) {
       lastUpdate: () => ipcRenderer.invoke('desktop:update-last'),
       snoozeUpdate: () => ipcRenderer.invoke('desktop:update-snooze'),
       openUpdate: () => ipcRenderer.invoke('desktop:update-open'),
+      music: {
+        folders: () => ipcRenderer.invoke('desktop:music-folders'),
+        suggested: () => ipcRenderer.invoke('desktop:music-suggested'),
+        addFolder: (path) => ipcRenderer.invoke('desktop:music-add', path == null ? undefined : String(path)),
+        removeFolder: (id) => ipcRenderer.invoke('desktop:music-remove', String(id)),
+        scan: () => ipcRenderer.invoke('desktop:music-scan'),
+      },
       onUpdate: listen('desktop:update'),
     }),
   );

@@ -41,6 +41,31 @@ export interface DesktopUpdateCheck {
 
 type Off = () => void;
 
+/** A music folder on the computer (Find music, desktop app). */
+export interface DesktopMusicFolder {
+  id: string;
+  path: string;
+}
+
+/** A song file in a music folder: `rel` inside the folder, '/' separated. */
+export interface DesktopMusicFile {
+  folder: string;
+  rel: string;
+  size: number;
+  modifiedAt: number;
+}
+
+/** Music folders (main/deviceMusic.js); the files play from app://host-caster/_device/<folder>/<rel>. */
+export interface DesktopMusicBridge {
+  folders(): Promise<DesktopMusicFolder[]>;
+  /** the system Music folder when it exists */
+  suggested(): Promise<string | null>;
+  /** `path` = the suggested folder; without it a folder picker opens (null = cancelled) */
+  addFolder(path?: string): Promise<DesktopMusicFolder | null>;
+  removeFolder(id: string): Promise<void>;
+  scan(): Promise<DesktopMusicFile[]>;
+}
+
 export interface DesktopBridge {
   version: string;
   platform: 'win32' | 'darwin' | 'linux' | string;
@@ -62,6 +87,8 @@ export interface DesktopBridge {
   snoozeUpdate(): Promise<void>;
   openUpdate(): Promise<boolean>;
   onUpdate(cb: (u: DesktopUpdate | null) => void): Off;
+  /** desktop 0.1.5+ */
+  music?: DesktopMusicBridge;
 }
 
 export const desktop: DesktopBridge | undefined =

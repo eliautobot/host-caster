@@ -1,7 +1,7 @@
 // Getting music in: file/folder/playlist pickers, the "Add music" menu, import progress and drag and drop.
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { CloudDownload, FileMusic, FolderOpen, ListMusic, Plug, Plus, Radio, Server, Upload } from 'lucide-react';
+import { CloudDownload, FileMusic, FolderOpen, FolderSearch, ListMusic, Plug, Plus, Radio, Server, Upload } from 'lucide-react';
 import {
   AUDIO_ACCEPT,
   PLAYLIST_ACCEPT,
@@ -15,10 +15,12 @@ import {
   type ImportProgress,
   type PickedFile,
 } from '@/core/library';
+import { devicePlatform } from '@/core/library/device';
 import { navigate } from '@/state/router';
 import { runAction } from '../actions';
 import { Button, toast } from '../components';
 import { ActionMenu, type MenuItem } from './ActionMenu';
+import { deviceMusicLabel } from './DeviceMusicSheet';
 import { dialogs } from './dialogs';
 
 export function useImportProgress(): ImportProgress {
@@ -128,8 +130,10 @@ export function syncServer() {
 }
 
 export function addMusicItems(p: ReturnType<typeof usePickers>): MenuItem[] {
+  const device = deviceMusicLabel(devicePlatform());
   return [
     { icon: FileMusic, label: 'Add songs', onSelect: p.pickFiles },
+    { icon: FolderSearch, label: device ?? '', onSelect: dialogs.deviceMusic, hidden: !device },
     { icon: FolderOpen, label: 'Add a folder', onSelect: p.pickFolder, hidden: !p.canPickFolder },
     { icon: Radio, label: 'Add internet radio', onSelect: dialogs.addStream },
     { icon: ListMusic, label: 'Import a playlist file', onSelect: p.pickPlaylist },

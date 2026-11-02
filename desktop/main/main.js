@@ -5,9 +5,10 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, truncateSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, ipcMain, Menu, net, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from 'electron';
 import { APP_ORIGIN, handleAppProtocol, registerAppScheme } from './appProtocol.js';
 import { startHelper } from './helper/server.js';
+import { createDeviceMusic } from './deviceMusic.js';
 import { createKeychain } from './keychain.js';
 import { linksIn, registerLinkHandler } from './links.js';
 import { createSettings } from './settings.js';
@@ -87,6 +88,22 @@ app.on('will-finish-launching', () => {
 
 // ---- settings, keychain, updates -------------------------------------------------------------------------------------
 const settings = createSettings(join(app.getPath('userData'), 'desktop-settings.json'));
+const musicDir = () => {
+  try {
+    return app.getPath('music');
+  } catch {
+    return null;
+  }
+};
+// music folders: HOSTCASTER_MUSIC_PICK answers the folder picker in tests (no system dialog)
+const deviceMusic = createDeviceMusic(join(app.getPath('userData'), 'music-folders.json'), {
+  musicDir,
+  pickFolder: async () => {
+    if (env.HOSTCASTER_MUSIC_PICK) return env.HOSTCASTER_MUSIC_PICK;
+    const r = await dialog.showOpenDialog(win, { title: 'Add a music folder', defaultPath: musicDir() ?? undefined, properties: ['openDirectory'] });
+    return r.canceled ? null : (r.filePaths[0] ?? null);
+  },
+});
 const keychain = createKeychain();
 const updates = createUpdates({
   manifestUrl: UPDATE_URL,
@@ -236,6 +253,11 @@ function bridge() {
   handle('desktop:update-check', () => updates.check({ manual: true }));
   handle('desktop:update-last', () => updates.last ?? null);
   handle('desktop:update-snooze', () => updates.snooze());
+  handle('desktop:music-folders', () => deviceMusic.folders());
+  handle('desktop:music-suggested', () => deviceMusic.suggested());
+  handle('desktop:music-add', (path) => deviceMusic.addFolder(typeof path === 'string' ? path : undefined));
+  handle('desktop:music-remove', (id) => deviceMusic.removeFolder(String(id)));
+  handle('desktop:music-scan', () => deviceMusic.scan());
   // the download page (the file for each system and how to open an unsigned build the first time); the file itself
   // only when the manifest names no page
   handle('desktop:update-open', () => {
@@ -267,7 +289,7 @@ function guardSession() {
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('com.hostcaster.app');
   const appDir = env.HOSTCASTER_APP_DIR ?? join(app.getAppPath(), 'app-dist');
-  handleAppProtocol(appDir);
+  handleAppProtocol(appDir, deviceMusic);
   guardSession();
   helper = await startHelper({
     dataDir: app.getPath('userData'),

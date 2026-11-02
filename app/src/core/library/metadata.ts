@@ -32,13 +32,35 @@ export async function readSongMeta(file: File): Promise<SongMeta> {
   } catch (err) {
     console.warn('[hostcaster] could not read tags of', file.name, err);
   }
+  const song = songMetaFrom(meta, file.name);
+  if (!song.durationMs) song.durationMs = await probeBlobDuration(file);
+  return song;
+}
+
+/**
+ * Tags from the first bytes of a file that stays where it is (a music folder on the computer): `size` is the whole
+ * file's, so the duration estimate is right; without one the browser decoder measures `url`.
+ */
+export async function readSongMetaFromHead(head: Uint8Array, file: { name: string; size: number; mime: string }, url: string): Promise<SongMeta> {
+  let meta: IAudioMetadata | undefined;
+  try {
+    const { parseBuffer } = await import('music-metadata');
+    meta = await parseBuffer(head, { mimeType: file.mime, size: file.size, path: file.name }, { duration: true, skipPostHeaders: true });
+  } catch (err) {
+    console.warn('[hostcaster] could not read tags of', file.name, err);
+  }
+  const song = songMetaFrom(meta, file.name);
+  if (!song.durationMs) song.durationMs = await probeDuration(url);
+  return song;
+}
+
+function songMetaFrom(meta: IAudioMetadata | undefined, name: string): SongMeta {
   const c = meta?.common;
   const cover = pickCover(c?.picture);
-  let durationMs = meta?.format.duration ? Math.round(meta.format.duration * 1000) : 0;
-  if (!durationMs) durationMs = await probeDuration(file);
+  const durationMs = meta?.format.duration ? Math.round(meta.format.duration * 1000) : 0;
   const artist = first(c?.artist) ?? first(c?.artists) ?? first(c?.albumartist) ?? 'Unknown artist';
   return {
-    title: first(c?.title) ?? titleFromFileName(file.name),
+    title: first(c?.title) ?? titleFromFileName(name),
     artist,
     album: first(c?.album) ?? 'Unknown album',
     // compilation flag (iTunes TCMP / cpil) without an album artist: one album, "Various artists"
@@ -61,14 +83,22 @@ function normalizeImageMime(format: string | undefined): string {
 }
 
 /** Duration from the browser decoder when the tags have none. */
-function probeDuration(file: File): Promise<number> {
+async function probeBlobDuration(file: Blob): Promise<number> {
+  if (typeof Audio === 'undefined') return 0;
+  const url = URL.createObjectURL(file);
+  try {
+    return await probeDuration(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export function probeDuration(url: string): Promise<number> {
   if (typeof Audio === 'undefined') return Promise.resolve(0);
   return new Promise((resolve) => {
     const el = new Audio();
-    const url = URL.createObjectURL(file);
     const done = (ms: number) => {
       clearTimeout(timer);
-      URL.revokeObjectURL(url);
       el.removeAttribute('src');
       resolve(ms);
     };

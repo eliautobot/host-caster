@@ -1,10 +1,12 @@
 // The app's own pages: the web app (built with Vite) is bundled inside the desktop app and served from app://host-caster
 // (a privileged, secure, standard scheme: a stable origin for IndexedDB, Media Session, fetch and CORS). Nothing
-// outside the bundled folder can be read, and unknown paths fall back to index.html (Spotify's /spotify/callback).
+// outside the bundled folder can be read (except song files in the music folders the person picked, at /_device/), and
+// unknown paths fall back to index.html (Spotify's /spotify/callback).
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { protocol } from 'electron';
 import { contentSecurityPolicy } from './csp.js';
+import { DEVICE_PREFIX } from './deviceMusic.js';
 
 export const APP_SCHEME = 'app';
 export const APP_HOST = 'host-caster';
@@ -40,8 +42,8 @@ export function registerAppScheme() {
   ]);
 }
 
-/** Serves `appDir` on app://host-caster. */
-export function handleAppProtocol(appDir) {
+/** Serves `appDir` on app://host-caster; `device` (deviceMusic.js) serves the music folders at /_device/. */
+export function handleAppProtocol(appDir, device) {
   const root = normalize(appDir);
   const index = join(root, 'index.html');
   protocol.handle(APP_SCHEME, async (request) => {
@@ -53,6 +55,7 @@ export function handleAppProtocol(appDir) {
     } catch {
       return new Response('Bad request', { status: 400 });
     }
+    if (device && path.startsWith(DEVICE_PREFIX)) return device.serve(request, path);
     let file = normalize(join(root, path));
     if (file !== root && !file.startsWith(root + sep)) return new Response('Not found', { status: 404 });
     const info = await stat(file).catch(() => undefined);

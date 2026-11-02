@@ -31,6 +31,7 @@ Android and iOS. Other websites and apps cannot read it.
 | What | Notes |
 | --- | --- |
 | Your songs and covers | Files you import are copied into the app. They are never uploaded. |
+| Music found on the device | Only if you turn it on (Library, Add music, Find music on this device or Add a music folder). The app keeps a list of the song files (name, folder, size, date, tags) and a small cover per album; the songs stay where they are and play from there. Never uploaded, never synced. |
 | Library, playlists, likes, play counts | |
 | Hosts and stations | Names, personalities, voices, schedules. |
 | Brains and voices | Addresses, models and, for **This device** connections, the API key. |
@@ -50,6 +51,14 @@ profile could read these, keys included. Use a screen lock, and a separate brows
 
 **Microphone and location** are used only when you press the button: the microphone for a call-in to your hosts,
 location for "use my location" on the About me page (rounded to about 100 m).
+
+**Music and audio (Android)** is asked for only when you choose Find music on this device. The app then reads the
+phone's own list of music files (Android's media library: title, artist, album, length, folder, size and the cover
+inside the file), only the ones marked as music; ringtones, alarms, notification sounds, podcasts, recordings, voice
+notes and files under 30 seconds are left out. With Keep my music up to date it reads that list again when the app
+opens or comes back. Nothing about these files leaves the phone. On a computer, the desktop app and Chrome or Edge read
+only the music folders you pick. To stop, use Remove from library in the same place, then take the permission back in
+the phone's settings (or remove the folder).
 
 ## 2. On your Host-Caster server
 

@@ -1,0 +1,160 @@
+.aw-devmusic__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.aw-devmusic__intro p {
+  margin: 0;
+}
+
+.aw-devmusic__badge {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.aw-devmusic__badge svg {
+  width: 24px;
+  height: 24px;
+}
+
+.aw-devmusic__points {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0 0 0 18px;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.aw-devmusic__muted {
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.aw-devmusic__path {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.aw-devmusic__busy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 0 20px;
+}
+
+.aw-devmusic__busy .aw-import__bar {
+  width: 100%;
+}
+
+.aw-devmusic__busy-title {
+  margin: 0;
+  font-weight: var(--weight-medium);
+}
+
+.aw-devmusic__spin {
+  width: 28px;
+  height: 28px;
+  color: var(--accent);
+  animation: aw-devmusic-spin 1s linear infinite;
+}
+
+@keyframes aw-devmusic-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-devmusic__spin {
+    animation: none;
+  }
+}
+
+.aw-devmusic__summary {
+  margin: 0 0 8px;
+  font-weight: var(--weight-medium);
+}
+
+.aw-devmusic__folders {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.aw-devmusic__folder {
+  padding: 4px 14px;
+}
+
+.aw-devmusic__folder + .aw-devmusic__folder {
+  border-top: 1px solid var(--line);
+}
+
+.aw-devmusic__folder .aw-toggle-row__desc {
+  overflow-wrap: anywhere;
+}
+
+.aw-devmusic__option {
+  margin-top: 14px;
+}
+
+.aw-devmusic__note {
+  margin: 12px 0 0;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.aw-devmusic__error {
+  margin: 12px 0 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.aw-devmusic__roots {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.aw-devmusic__root {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 4px 4px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.aw-devmusic__root > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--text-2);
+}
+
+.aw-devmusic__root-path {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+}

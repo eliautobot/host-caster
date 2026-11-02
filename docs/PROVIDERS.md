@@ -206,6 +206,7 @@ The URL is the password. Anyone with it can send notes to your hosts. Delete the
 | Source | Where | What you need | Plays offline |
 | --- | --- | --- | --- |
 | Your files | Library, Add music | nothing | yes |
+| Music on the device | Library, Add music, Find music on this device (Android) or Add a music folder (desktop, Chrome and Edge) | allowing music and audio, or picking a folder | yes |
 | Server library | Library (when signed in) | a server with `MUSIC_DIR` | no |
 | Subsonic or Navidrome | Music services | your own server | on your network |
 | Internet radio | Music services | nothing | no |
@@ -220,6 +221,16 @@ WAV, WEBM, AIFF and CAF work. Tags and covers are read on your device; duplicate
 fingerprint. Playlists: make your own, or import M3U, M3U8 and PLS files (songs are matched to your library);
 export any playlist as M3U. Songs are stored inside the app on that device (Settings, Data & storage shows how
 much space they use) and are never uploaded.
+
+### Music on the device
+
+Off until you turn it on. **Find music on this device** (Android) reads the phone's media library after you allow
+music and audio; **Add a music folder** (desktop app, and Chrome or Edge on a computer) reads the folders you pick, the
+system Music folder first. You see what was found per folder, switch folders on or off, and the songs are added where
+they are: no copy, no extra storage, with their tags and covers. Ringtones, recordings, voice notes, podcasts and
+files under 30 seconds are left out, and songs already in your library are not added twice. **Keep my music up to
+date** looks again when the app opens or comes back (new songs added, deleted ones removed). These songs stay on that
+device and do not sync. Details: [MUSIC-SOURCES.md](MUSIC-SOURCES.md#music-on-the-device).
 
 ### Server library
 

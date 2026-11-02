@@ -54,6 +54,7 @@ const SOURCE_LABEL: Record<TrackSource, string> = {
   youtube: 'YouTube',
   stream: 'Radio',
   subsonic: 'Subsonic',
+  device: 'Device music',
 };
 
 /** Library (owner: player agent): songs, albums, artists, playlists, liked; import, streams, server library. */

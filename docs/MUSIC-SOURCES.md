@@ -7,6 +7,7 @@ server: what each source needs on the server side. How to use each one in the ap
 | Source | Server needed? | What you set up |
 | --- | --- | --- |
 | [Your files](#your-files) | no | nothing |
+| [Music on the device](#music-on-the-device) | no | nothing |
 | [Server library](#server-library) | yes | `MUSIC_DIR` (Docker: `MUSIC_PATH`) |
 | [Subsonic and Navidrome](#subsonic-and-navidrome) | no (your music server) | a Subsonic-compatible server |
 | [Internet radio](#internet-radio) | no | nothing |
@@ -19,6 +20,26 @@ server: what each source needs on the server side. How to use each one in the ap
 Songs added in the app (Library, Add music) are stored inside the app on that device and never uploaded, also when
 you are signed in. Every device keeps its own files. Playlists sync between your devices; a file that is only on
 another device keeps its place in the list and the playlist says how many songs are elsewhere.
+
+## Music on the device
+
+An option, off until you turn it on: the app finds the songs already on the device and adds them where they are, with
+no copy and no extra storage.
+
+- **Android:** Library, Add music, **Find music on this device**. Android asks to allow music and audio. The app reads
+  the phone's media library (songs marked as music; ringtones, alarms, notification sounds, podcasts, recordings, voice
+  notes and files under 30 seconds are left out), shows what it found per folder with a switch for each, and adds the
+  songs with their tags and covers. They play from where they are, with seeking. Memory cards count too.
+- **Desktop app:** Library, Add music, **Add a music folder**. The system Music folder is suggested; any other folder
+  works too, and you can add several.
+- **Web:** the same, in Chrome and Edge on a computer only (they can keep access to a folder; the browser may ask again
+  after a restart unless you choose "Allow on every visit"). Other browsers and phone browsers do not show the option.
+
+**Keep my music up to date** (on by default) looks again when the app opens or comes back: new songs are added,
+deleted ones are taken out of the library, nothing else changes. Songs already in your library (an imported copy or the
+same song from another source) are not added twice. Like your files, these songs stay on that device and do not sync
+to your other devices; a playlist keeps their place on the others. **Remove from library** in the same place takes them
+all out again (the files stay).
 
 ## Server library
 

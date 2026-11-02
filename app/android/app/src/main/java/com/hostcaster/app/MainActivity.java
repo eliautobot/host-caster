@@ -9,6 +9,8 @@ import androidx.activity.EdgeToEdge;
 import androidx.activity.SystemBarStyle;
 import com.hostcaster.app.audio.HostCasterAudioPlugin;
 import com.getcapacitor.BridgeActivity;
+import com.hostcaster.app.music.DeviceMusicPlugin;
+import com.hostcaster.app.music.DeviceMusicStream;
 
 public class MainActivity extends BridgeActivity {
 
@@ -17,7 +19,10 @@ public class MainActivity extends BridgeActivity {
         // app-local plugins must be registered before the bridge starts
         registerPlugin(HostCasterAudioPlugin.class);
         registerPlugin(LoopbackPlugin.class);
+        registerPlugin(DeviceMusicPlugin.class);
         super.onCreate(savedInstanceState);
+        // music on the device plays from where it is, with seeking (DeviceMusicStream); the rest is Capacitor's
+        if (getBridge() != null) getBridge().setWebViewClient(new DeviceMusicStream(getBridge()));
 
         // Edge-to-edge on every Android version (15+ forces it anyway): the web UI pads itself with
         // env(safe-area-inset-*). Bar icon colours follow the theme through SystemBars.setStyle in JS.
