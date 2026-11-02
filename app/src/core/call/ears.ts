@@ -1,12 +1,13 @@
 // The listener's side of a call: speech to text, one utterance at a time, with live captions and the end of speech
 // found by the recognizer itself. Android/iOS: the phone's own recognizer (no popup, partial results). Browsers: the
 // Web Speech API where it exists (Chrome, Edge, Safari). There is no server or own-key speech-to-text in Host-Caster,
-// so a browser without Web Speech (Firefox) takes typed words in the call instead.
+// so a browser without Web Speech (Firefox), or with no speech service behind it (the desktop app's built-in Chromium
+// ends every try with 'network'), takes typed words in the call instead.
 import { SpeechRecognition } from '@capgo/capacitor-speech-recognition';
-import { ensureSpeechPermission, isNative, speechSupport } from '../native';
+import { ensureSpeechPermission, isDesktop, isNative, speechSupport } from '../native';
 import { HostCasterAudio } from '../native/plugin';
 import { hasPlugin, platform } from '../native/platform';
-import { MicBlocked, type Ears, type ListenOptions } from './session';
+import { MicBlocked, NoSpeech, type Ears, type ListenOptions } from './session';
 
 interface WebResultEvent {
   results: ArrayLike<ArrayLike<{ transcript: string }>>;
@@ -66,6 +67,8 @@ function webEars(lang: string): Ears {
         };
         rec.onerror = (e) => {
           if (e.error === 'not-allowed' || e.error === 'service-not-allowed') end(() => reject(new MicBlocked('Microphone access was blocked')));
+          // no speech service it can reach, no microphone, or not this language: the call goes on by typing
+          else if (e.error === 'network' || e.error === 'audio-capture' || e.error === 'language-not-supported') end(() => reject(new NoSpeech(e.error)));
         };
         rec.onend = () => end(() => (opts.signal.aborted ? reject(new Error('aborted')) : resolve(text)));
         const timer = setTimeout(() => rec.stop(), opts.maxMs);
@@ -170,5 +173,7 @@ export async function callEars(lang?: string): Promise<Ears> {
   if (override) return override;
   const language = lang || (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
   if (isNative) return (await speechSupport()) === 'native' ? nativeEars(language) : noEars;
+  // the desktop app: Electron's Chromium has the Web Speech API but no Google speech service behind it
+  if (isDesktop) return noEars;
   return webCtor() ? webEars(language) : noEars;
 }

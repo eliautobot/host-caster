@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FakeEars } from './fakeEars';
-import { CallSession, isEcho, MicBlocked, type CallBrain, type CallDeps, type Ears, type HostLine, type Mouth, type TurnReply } from './session';
+import { CallSession, isEcho, MicBlocked, NoSpeech, type CallBrain, type CallDeps, type Ears, type HostLine, type Mouth, type TurnReply } from './session';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function until(fn: () => boolean, ms = 3000) {
@@ -258,6 +258,22 @@ describe('live call state machine', () => {
     await until(() => b.asked.includes('hello'));
     await s.hangUp();
     expect(s.state.status).toBe('ended');
+  });
+
+  it('no speech service (the desktop app, a browser without one): typed at once, with a note, no "still there?" rush', async () => {
+    const deaf: Ears = { kind: 'web', overlap: false, listen: async () => Promise.reject(new NoSpeech('network')) };
+    const { s, b } = setup({ ears: deaf });
+    void s.start();
+    await until(() => s.state.mic === 'none');
+    expect(s.state.notice).toMatch(/type your side/);
+    s.type('hello');
+    await until(() => b.asked.includes('hello'));
+    await s.hangUp();
+    expect(s.state.status).toBe('ended');
+    const none: Ears = { kind: 'none', overlap: false, listen: () => new Promise(() => undefined) };
+    const typed = setup({ ears: none }).s;
+    expect(typed.state.mic).toBe('none');
+    expect(typed.state.notice).toMatch(/type your side/);
   });
 
   it('a failed brain: an honest "say that again", and the call goes on', async () => {

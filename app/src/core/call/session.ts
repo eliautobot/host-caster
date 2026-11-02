@@ -68,6 +68,13 @@ export class MicBlocked extends Error {
   override name = 'MicBlocked';
 }
 
+/** Speech to text can not work here (no speech service behind the recognizer, no microphone): the call is typed. */
+export class NoSpeech extends Error {
+  override name = 'NoSpeech';
+}
+
+const NO_SPEECH_NOTE = 'Talking is not available here, so type your side of the call.';
+
 export interface Mouth {
   /** voice lines ahead of time (the greeting while the phone rings) */
   prime?(lines: HostLine[]): void;
@@ -176,7 +183,10 @@ export class CallSession {
   constructor(private deps: CallDeps) {
     this.limits = { ...DEFAULT_LIMITS, ...deps.limits };
     this.now = deps.now ?? Date.now;
-    if (deps.ears.kind === 'none') this._state.mic = 'none';
+    if (deps.ears.kind === 'none') {
+      this._state.mic = 'none';
+      this._state.notice = NO_SPEECH_NOTE;
+    }
   }
 
   get state(): CallState {
@@ -368,6 +378,11 @@ export class CallSession {
         if (!this.live) return undefined;
         if (err instanceof MicBlocked) {
           this.set({ mic: 'blocked', notice: 'Microphone access is off. Type below, or allow the microphone and call again.' });
+          quietSince = this.now();
+          continue;
+        }
+        if (err instanceof NoSpeech) {
+          this.set({ mic: 'none', notice: NO_SPEECH_NOTE });
           quietSince = this.now();
           continue;
         }
