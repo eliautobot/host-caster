@@ -65,6 +65,8 @@ Screenshots from a demo install with demo songs.
 **Your music, wherever it lives** ([docs/MUSIC-SOURCES.md](docs/MUSIC-SOURCES.md))
 - Your files: songs and whole folders (MP3, M4A, FLAC, OGG, OPUS, WAV and more) with tags and covers. Playlists,
   likes, M3U and PLS import and export.
+- Find music on this device (optional): the Android app finds the songs already on the phone, the desktop app
+  plays your music folder, and both play them where they are (nothing copied) and keep up with new songs.
 - Your server's music folder, streamed to every device.
 - Subsonic and Navidrome servers.
 - Tens of thousands of internet radio stations (radio-browser.info), or any stream address.
