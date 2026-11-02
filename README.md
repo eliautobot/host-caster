@@ -47,7 +47,9 @@ Screenshots from a demo install with demo songs.
   long, and the **talk mix**: more about the music or more about your day.
 - **Your day first**: every break carries one item from your day when there is one, and the first break of a session
   and of each hour is a short rundown (next events, reminders, weather, a headline or two).
-- **Call in**: talk to the hosts by voice or by typing, and they answer on air.
+- **Call or message the hosts**: call the station for a live conversation (the music pauses, a host picks up in a
+  second or two, you talk back and forth until you hang up, then the music comes back where it was), or message them
+  and they write back right away while the music plays.
 - **On-air history** of every break, with the songs around it.
 - Breaks are written while the song plays. If one is not ready in time, the music simply goes on: never silence.
 
@@ -90,8 +92,8 @@ Screenshots from a demo install with demo songs.
 
 **Hosts that look things up, remember and help**
 - **They do their homework**: the hosts read the full details behind your day (what an invitation is about, who is
-  coming, the email it came with, the article behind a headline) and keep a short brief on each, so you can call in
-  with a follow-up ("who's coming?", "read me Dana's email") and get a real answer. Every lookup is listed in the app.
+  coming, the email it came with, the article behind a headline) and keep a short brief on each, so you can call or
+  message with a follow-up ("who's coming?", "read me Dana's email") and get a real answer. Every lookup is listed in the app.
 - **Heads-ups**: when a meeting is cancelled or moved or an urgent email arrives while you listen, the music dips and
   a host tells you right away; plus a reminder before meetings with other people.
 - **The time, said right**: one host tells the time in the last line of a break, made at the moment you hear it.

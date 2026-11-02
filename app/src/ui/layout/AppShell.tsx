@@ -8,6 +8,7 @@ import { MiniPlayer } from '../player/MiniPlayer';
 import { PlayerBar } from '../player/PlayerBar';
 import { resolveScreen, screens, type ScreenMatch } from '../screens';
 import { UpdateNotice } from '../update/UpdateNotice';
+import { CallLayer } from '../call/CallLayer';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import './layout.css';
@@ -101,6 +102,7 @@ export function AppShell() {
           </Suspense>
         </Sheet>
       )}
+      <CallLayer />
       <UpdateNotice />
       <Toaster />
     </div>

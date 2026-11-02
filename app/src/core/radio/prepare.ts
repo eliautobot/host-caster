@@ -10,6 +10,7 @@ import type { MemoryChange } from '../memory/commands';
 import type { ActionTurn } from '../actions/callin';
 import { linesAroundAction } from '../actions/echo';
 import { trackFromPacket } from '../tracker/sync';
+import { chatNoteForAir } from '../call/onair';
 import { listBrief } from '../tracker/brief';
 import { memoryBrief, quieterNow } from '../memory/brief';
 import { memoryFromInbox } from '../memory';
@@ -170,6 +171,11 @@ async function prepareWith(input: PrepareInput, t0: number, hosts: Host[], brain
   if (input.onAir && !packet.recentBreaks.some((b) => b.id === input.onAir!.id)) packet.recentBreaks = [input.onAir, ...packet.recentBreaks];
   // what the hosts found out about the day's items (read from the device, never waited for)
   packet.dossiers = await dossiersForPacket(packet).catch(() => undefined);
+  // the listener allowed it: their newest message in the hosts' chat may come up once (core/call/onair.ts)
+  if (input.kind === 'regular' || input.kind === 'opening') {
+    const chat = await chatNoteForAir(airAt).catch(() => undefined);
+    if (chat) packet.notes = [...(packet.notes ?? []), chat];
+  }
   // a question from the listener's AI app airs with its answer (looked up in the background)
   const fullInbox = packet.inbox;
   const inboxReady = await inboxForBreak(packet.inbox).catch(() => ({ inbox: packet.inbox, answers: {} }));

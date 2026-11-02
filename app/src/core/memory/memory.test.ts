@@ -167,6 +167,21 @@ describe('learning step', () => {
     expect(still[0]?.op === 'add' && still[0].draft.kind).toBe('people');
   });
 
+  it('"next weekend" on a Monday: the card lasts to its latest date and the next breaks still bring it up', () => {
+    const monday = new Date(2026, 10, 2, 14, 30).getTime();
+    // the brain wrote this weekend, the words "next weekend" read as the one after: the card stays until the later one
+    const out = validateActions([{ op: 'add', kind: 'plans', text: 'Your sister Ana is visiting on November 7-8, 2026.' }], { said: 'My sister Ana is visiting next weekend.', cards: [], now: monday, from: 'call' });
+    expect(out[0]?.op).toBe('add');
+    if (out[0]?.op !== 'add') return;
+    expect(new Date(out[0].draft.expiresAt!).getDate()).toBe(15);
+    const ana = card({ id: 'm_ana', kind: 'plans', text: out[0].draft.text, expiresAt: out[0].draft.expiresAt });
+    const others = [card({ id: 'm_job', text: 'You work as a designer at Acme' }), card({ id: 'm_dog', text: 'You have a dog named Pixel' })];
+    expect(pickCards([...others, ana], { topics: 'weather news', now: monday }).map((c) => c.id)).toContain('m_ana');
+    // the card's own later date wins over an earlier one from the words
+    const later = validateActions([{ op: 'add', kind: 'plans', text: 'Your sister Ana is visiting the weekend of November 14.' }], { said: 'My sister Ana is visiting this weekend.', cards: [], now: monday, from: 'call' });
+    expect(later[0]?.op === 'add' && new Date(later[0].draft.expiresAt!).getDate()).toBe(14);
+  });
+
   it('an email or the news can not plant a memory (prompt injection)', () => {
     // the learning step only ever sees what the listener said; if a model still returns facts from elsewhere, they are not grounded
     const planted = validateActions(

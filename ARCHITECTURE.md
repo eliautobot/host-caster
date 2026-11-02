@@ -138,7 +138,8 @@ Media Session API is set for every track (lock screen / notification controls).
 ```
 radio.start(stationId), radio.stop(), radio.state: { stationId?, onAir: boolean, speakingHostId?, caption?,
   nextBreakIn: number /* songs */, lastBreak? }
-radio.talkNow(prompt?: string)    // "Talk to the host": user call-in, breaks in right away ("play X" = song request)
+radio.talkNow(prompt?: string)    // an on-air call-in (AI apps, MCP): breaks in right away ("play X" = song request)
+radio.setCall(on), radio.requestSong(said), radio.anyAppActive, radio.nowPlaying   // for core/call
 radio.reload()                    // picks up station edits from the next break; radio.skipBreak()
 radio.on('state'|'break'|'line', cb)
 ```
@@ -379,13 +380,46 @@ for you" with Undo. Where the rules live: Rule 1 in `tracker/safety.ts`, `tracke
 schemas, token, caps). Tests: `actions.test.ts`, `when.test.ts`, `injection.test.ts` (30 hostile inputs over 9 doors),
 `tracker.test.ts`.
 
+`core/call/` live calls with the station and the hosts' chat (the app's Call / Message buttons; `ui/call/`).
+- `session.ts`: `CallSession`, the voice call's state machine with everything injected (brain, ears, mouth, music,
+  ring, clock), so `session.test.ts` runs it with fakes: ringing (the music fades and pauses, a short ring; the lead
+  host's pickup line is voiced during the ring) -> speaking -> listening (partial captions; the recognizer finds the end
+  of speech) -> thinking (a lookup not done in 2.5 s: a hold line) -> speaking -> listening ... Barge-in: the Talk
+  button, or words over the host when the ears can listen meanwhile (`overlap`: desktop browsers; `isEcho` drops the
+  host's own words picked up by the mic); what was said over the host is the next turn. Silence: "still there?" after
+  12 s, a kind wrap-up 30 s after that (5x longer when muted or typing). Ends: Hang up, "bye / that's all / thanks,
+  that's it" (`phrases.isGoodbye`: short replies only, never a question), silence, or the cap (heads-up at 18 min, end
+  at 20). The end is one sign-off line (7 s at most), then the music resumes where it was. Typed words (no mic, or
+  "Type instead") are turns too.
+- `brain.ts`: `hostsBrain(station, 'voice' | 'text', hooks)`: per turn the same engines as a call-in, in order: "got
+  it" snoozes the last heads-up, the words go in the journal (`noteSaid`), "remember / forget that ..."
+  (`takeMemoryCommand`), a song request (`radio.requestSong`: queued next, it plays after the call), a Notion ask,
+  then `takeActionTurn` (Your list, a proposal read back by code, the listener's spoken or typed "yes" runs it). The
+  answer: `runAgent` with the call so far, the context packet (built once at the start, refreshed every 5 min:
+  calendar with people, important mail, weather, headlines, dossiers, the last break), memory cards for the words,
+  Your list, and the lookups (3 steps, 3 lookups, 16 s voice / 22 s chat). A read-back that waits for a yes skips the
+  model (a word, then code's exact line). The co-host may add one line every few turns. `learnFromWords` runs after.
+  No AI brain: an honest pickup ("my AI brain is off, I can take song requests and notes") and scripted answers.
+- `mouth.ts`: each reply is cut into sentences; the first is voiced and played as soon as it is ready while the next
+  two are voiced behind it (the host's own voice engine, 9 s per sentence, else this device's voice). `ears.ts`: the
+  phone's recognizer (`@capgo/capacitor-speech-recognition`, partial results, no popup, per-session events), Web Speech
+  in browsers, else typing (there is no server or own-key speech-to-text). `music.ts`: own player = a 280 ms fade and
+  pause, then play with a fade-in; any-app mode (Android) = the other app paused through its media controls and
+  `audioFocus.hold()` (full transient focus, `NowPlaying.holdForCall`), released and played again only if it was
+  playing. `ring.ts`: the ring and pickup click rendered to a WAV on the device. `live.ts`: `liveCall` (one call at a
+  time; `radio.setCall(true)` keeps every break, call-in answer and heads-up off the air and stops one on air), the
+  hosts' side of the call goes in `breaks` (topic `call`). `chat.ts`: `hostChat`, the text thread (kv `chat:thread`,
+  12 h), the reply shown a few words at a time, an action's Yes/No card on the message, unread count; `onair.ts`:
+  "Hosts may mention our chat on air" (kv `chat:onair`, off by default) adds the newest message to the next regular
+  break's notes once. Debug builds: `window.__hostcaster.call.fakeEars()` / `hear(text)` for e2e (`e2e/call.e2e.mjs`).
+
 `core/api/` (owner: server agent) typed client for the server: `api.baseUrl`, `api.session`, `auth.signIn('google'|
 'x'|'local')`, `auth.signOut()`, `sync.pull()/push()`, `aiProxy`, `ttsProxy`, `integrations.calendar()`, `.email()`,
 `.fetchText(url)` (ICS/RSS through the server), `inbox.poll()`, `youtube.*`, `serverLibrary.*`.
 Signed out = local-only mode; every caller must handle `api.available === false`.
 
 `core/native/` (owner: native agent) thin wrappers that no-op on web: `isNative`, `platform`, `nativeTts`,
-`audioFocus.duck()/release()`, `mediaNotification.update(meta, playing)` + events, `anyApp` (Android: other music
+`audioFocus.duck()/release()` (`hold()/releaseHold()` for a call), `mediaNotification.update(meta, playing)` + events, `anyApp` (Android: other music
 apps' now playing via notification access; events `trackchange`, `playstate`), `openAuthUrl(url)`,
 `onDeepLink(cb)`, `speechToText()`, `pickAudioFiles()`.
 

@@ -46,8 +46,8 @@ export function pickCards(cards: MemoryCard[], opts: { topics: string; callIn?: 
     }
   };
   add(live.filter((c) => c.pinned).sort((a, b) => b.updatedAt - a.updatedAt), 3);
-  // plans in the next 10 days (a question about "next weekend" finds them)
-  add(live.filter((c) => c.kind === 'plans' && c.expiresAt !== undefined && c.expiresAt - now < 10 * DAY).sort((a, b) => a.expiresAt! - b.expiresAt!), 2);
+  // plans in the next two weeks (a question about "next weekend" finds them, even said on a Monday)
+  add(live.filter((c) => c.kind === 'plans' && c.expiresAt !== undefined && c.expiresAt - now < 14 * DAY).sort((a, b) => a.expiresAt! - b.expiresAt!), 2);
   const scored = live
     .map((c) => ({ c, s: overlap(words, c.text) + (call.size ? overlap(call, c.text) * 2 : 0) }))
     .filter((x) => x.s > 0)

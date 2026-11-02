@@ -208,11 +208,10 @@ check('second break is not another opening', Boolean(second) && !/welcome to/i.t
 
 // ------------------------------------------------------------------------------------------------ call-in
 await page.goto(`${base}/#/`);
-await page.getByRole('button', { name: 'Talk to the hosts' }).first().click();
-const dialog = page.getByRole('dialog');
-await dialog.getByLabel('What do you want to say?').fill('Shout-out to my sister Ana, she just got a new job as a nurse!');
+// Home offers the live call and the chat (e2e/call.e2e.mjs); the on-air call-in below is what AI apps and MCP use
+check('Home offers Call and Message', (await page.getByRole('button', { name: 'Call the station' }).count()) > 0 && (await page.getByRole('button', { name: /Message the hosts/ }).count()) > 0);
 await shot(page, 'e2e-callin-desktop');
-await dialog.getByRole('button', { name: 'Go on air' }).click();
+void page.evaluate((s) => window.__hostcaster.radio.talkNow(s).catch(() => undefined), 'Shout-out to my sister Ana, she just got a new job as a nurse!');
 const callStart = Date.now();
 let callShot = false;
 while (Date.now() - callStart < 90_000) {
@@ -237,9 +236,7 @@ if (call) check('call-in mentions Ana', /ana/i.test(call.lines.map((l) => l.text
   const want = st.titles.find((t) => t !== st.cur && t !== st.next);
   if (!want) check('song request (needs 3 songs in the media dir)', false, st.titles.join(', '));
   else {
-    await page.getByRole('button', { name: 'Talk to the hosts' }).first().click();
-    await page.getByRole('dialog').getByLabel('What do you want to say?').fill(`Could you play ${want} next?`);
-    await page.getByRole('dialog').getByRole('button', { name: 'Go on air' }).click();
+    void page.evaluate((s) => window.__hostcaster.radio.talkNow(s).catch(() => undefined), `Could you play ${want} next?`);
     const t1 = Date.now();
     let req;
     while (Date.now() - t1 < 90_000 && !req) {

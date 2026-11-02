@@ -49,8 +49,17 @@ Android and iOS. Other websites and apps cannot read it.
 Host-Caster does not add its own encryption on the device. Anyone who can open your unlocked phone or your browser
 profile could read these, keys included. Use a screen lock, and a separate browser profile on shared computers.
 
-**Microphone and location** are used only when you press the button: the microphone for a call-in to your hosts,
-location for "use my location" on the About me page (rounded to about 100 m).
+**Microphone and location** are used only when you press the button: the microphone during a call you start (Call
+the station) and until you hang up, location for "use my location" on the About me page (rounded to about 100 m).
+
+**Calls and the hosts' chat.** A call's speech is turned into text by your phone's own recognizer (Android, iOS) or
+your browser's speech recognition (Chrome, Edge, Safari send the audio to their maker's speech service, as they do for
+any website); Host-Caster has no speech-to-text server of its own and never keeps or uploads audio. What is kept: your
+words of each call and chat message go in the journal on this device (Recently, 14 days, the same as a call-in), the
+hosts' side of a call goes in the On-air history like a break, and the chat thread stays on this device for 12 hours.
+Each turn sends your words and the conversation so far to the hosts' AI brain (section 4) and their answer to the
+voice engine (section 5), like a break. Calls last up to 20 minutes. "Hosts may mention our chat on air" is off unless
+you turn it on.
 
 **Music and audio (Android)** is asked for only when you choose Find music on this device. The app then reads the
 phone's own list of music files (Android's media library: title, artist, album, length, folder, size and the cover

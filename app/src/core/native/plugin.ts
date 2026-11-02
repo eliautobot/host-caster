@@ -68,6 +68,8 @@ export interface HostCasterAudioPlugin {
   clearNowPlaying(): Promise<void>;
   duck(): Promise<{ result: 'granted' | 'own' | 'failed' | 'delayed' | 'unsupported' }>;
   releaseFocus(): Promise<void>;
+  holdCallFocus(): Promise<{ result: 'granted' | 'failed' | 'delayed' }>;
+  releaseCallFocus(): Promise<void>;
   /** iOS: back to the playback audio session after speech recognition (no-op on Android) */
   restoreSession(): Promise<void>;
   playClip(opts: { base64: string; ext?: string; volume?: number }): Promise<void>;

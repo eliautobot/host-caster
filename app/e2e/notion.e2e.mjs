@@ -124,9 +124,8 @@ try {
   const scripts = () => page.evaluate(() => window.__scripts.map((s) => s.map((l) => l.text).join(' ')));
 
   // ---------------------------------------------------------------------------------------------- call-in write
-  await page.getByRole('button', { name: 'Talk to the hosts' }).first().click();
-  await page.getByRole('dialog').getByLabel('What do you want to say?').fill('Hey, can you add oat milk to my list please?');
-  await page.getByRole('dialog').getByRole('button', { name: 'Go on air' }).click();
+  // the on-air call-in (AI apps and MCP still use it; the app's own Call / Message are core/call, e2e/call.e2e.mjs)
+  void page.evaluate((s) => window.__hostcaster.radio.talkNow(s).catch(() => undefined), 'Hey, can you add oat milk to my list please?');
   let answer;
   for (const t1 = Date.now(); Date.now() - t1 < 90_000 && !answer; await wait(300)) answer = (await scripts()).find((s) => /notion/i.test(s));
   check('call-in: hosts confirm on air', Boolean(answer) && /oat milk/i.test(answer), answer?.slice(0, 160));

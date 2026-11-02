@@ -44,6 +44,19 @@ export const audioFocus = {
       return 'failed';
     }
   },
+  /** A live call with the station: other apps pause (Android full transient focus) until releaseHold. */
+  async hold(): Promise<'granted' | 'failed' | 'delayed' | 'unsupported'> {
+    if (!ready()) return 'unsupported';
+    try {
+      return (await HostCasterAudio.holdCallFocus()).result;
+    } catch {
+      return 'failed';
+    }
+  },
+  async releaseHold(): Promise<void> {
+    if (!ready()) return;
+    await HostCasterAudio.releaseCallFocus().catch(() => {});
+  },
   /** After the break: give focus back so the other app returns to full volume. */
   async release(): Promise<void> {
     if (!ready()) return;

@@ -271,6 +271,40 @@ public final class NowPlaying {
         return "failed";
     }
 
+    // ---- a live call with the station: other apps pause (full transient focus) until it ends ----
+
+    private AudioFocusRequest callRequest;
+
+    /** @return granted | failed | delayed */
+    public String holdForCall() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            int r = audio.requestAudioFocus(duckListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+            return r == AudioManager.AUDIOFOCUS_REQUEST_GRANTED ? "granted" : "failed";
+        }
+        if (callRequest == null) {
+            AudioAttributes attrs = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build();
+            callRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(attrs)
+                .setOnAudioFocusChangeListener(duckListener, main)
+                .build();
+        }
+        int r = audio.requestAudioFocus(callRequest);
+        if (r == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return "granted";
+        if (r == AudioManager.AUDIOFOCUS_REQUEST_DELAYED) return "delayed";
+        return "failed";
+    }
+
+    public void releaseCall() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            audio.abandonAudioFocus(duckListener);
+        } else if (callRequest != null) {
+            audio.abandonAudioFocusRequest(callRequest);
+        }
+    }
+
     public void releaseDuck() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             audio.abandonAudioFocus(duckListener);

@@ -115,6 +115,26 @@ public class HostCasterAudioPlugin extends Plugin implements NowPlaying.Listener
             });
     }
 
+    /** A live call: full transient focus, so the music app pauses until releaseCallFocus. */
+    @PluginMethod
+    public void holdCallFocus(PluginCall call) {
+        getBridge()
+            .executeOnMainThread(() -> {
+                JSObject r = new JSObject();
+                r.put("result", nowPlaying.holdForCall());
+                call.resolve(r);
+            });
+    }
+
+    @PluginMethod
+    public void releaseCallFocus(PluginCall call) {
+        getBridge()
+            .executeOnMainThread(() -> {
+                nowPlaying.releaseCall();
+                call.resolve();
+            });
+    }
+
     /** Plays a voice clip natively (base64 audio). Resolves when it has finished or was stopped. */
     @PluginMethod
     public void playClip(PluginCall call) {

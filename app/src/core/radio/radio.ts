@@ -84,6 +84,9 @@ class Radio {
   private prepTimes: number[] = [];
   /** heads-up lines voiced ahead for the break after this song (it was written before they came in) */
   private headsUpLines = new Map<string, { text: string; clip: Promise<VoiceClip> }>();
+  /** a live call is on (core/call): nothing airs, the break on air stops */
+  private inCall = false;
+  private airing?: AbortController;
 
   get state(): RadioState {
     return this._state;
@@ -258,6 +261,33 @@ class Radio {
     await this.air(ready, this.anyAppMode ? 'anyapp' : 'over', undefined, { chime: !hold });
   }
 
+  /**
+   * A live call (core/call) starts or ends. While it is on, no break, call-in answer or heads-up airs (a break
+   * that is on air stops now); breaks are prepared as usual and the music is held by the call.
+   */
+  setCall(on: boolean): void {
+    this.inCall = on;
+    if (!on) return;
+    this.airing?.abort();
+    player.stopVoice();
+    if (this._state.phase === 'talking') this.set({ phase: 'music', speakingHostId: undefined, caption: undefined, script: undefined, lineIndex: undefined });
+  }
+
+  /** The radio follows another music app (Android any-app mode). */
+  get anyAppActive(): boolean {
+    return this.anyAppMode;
+  }
+
+  /** The song under the hosts right now (the other app's in any-app mode). */
+  get nowPlaying(): Track | TrackSummary | undefined {
+    return this.anyAppMode ? this.anyAppPrev : this.current;
+  }
+
+  /** A song request from a live call or chat: queued to play next (after the call), or not found. */
+  requestSong(said: string): Promise<SongRequest | undefined> {
+    return this.takeRequest(said);
+  }
+
   /** "One sec, let me pull that up": the lead host holds the line over the music while an answer is looked up. */
   private async sayHoldLine(station: Station): Promise<void> {
     const host = (await loadLineup(station))[0];
@@ -276,7 +306,7 @@ class Radio {
       tookMs: 0,
     } satisfies PreparedBreak;
     const run = async () => {
-      if (session !== this.session) return;
+      if (session !== this.session || this.inCall) return;
       this.set({ phase: 'talking', speakingHostId: host.id, caption: text });
       try {
         await airBreak(mini, this.anyAppMode ? 'anyapp' : 'over', { chime: true, onLine: () => undefined });
@@ -617,8 +647,10 @@ class Radio {
   private air(b: PreparedBreak, mode: AirMode, signal?: AbortSignal, opts: { chime?: boolean } = {}): Promise<void> {
     const run = async () => {
       const session = this.session;
-      if (session !== this.session || !this._state.onAir) return;
+      if (session !== this.session || !this._state.onAir || this.inCall) return;
       await this.addHeadsUpLines(b).catch(() => undefined);
+      const airing = (this.airing = new AbortController());
+      signal?.addEventListener('abort', () => airing.abort(), { once: true });
       this.set({ phase: 'talking', script: b.lines, lineIndex: undefined, notice: undefined, noticeLink: undefined });
       // a heads-up break-in is not a break: the station's song count goes on
       if (b.plan.kind === 'callin') this.coverBreak(b);
@@ -628,7 +660,7 @@ class Radio {
       this.onAirBreak = { id: `on-air-${now}`, createdAt: now, updatedAt: now, stationId: b.station.id, at: now, lines: b.lines, topics: planTopicKeys(b.plan), songBefore: b.songBefore, songAfter: b.songAfter };
       try {
         await airBreak(b, mode, {
-          signal,
+          signal: airing.signal,
           chime: opts.chime !== false,
           onLine: (line: BreakLine, i: number) => {
             if (session !== this.session) return;
@@ -637,7 +669,7 @@ class Radio {
             if (i === 0) this.report(line.hostId);
           },
         });
-        if (session !== this.session || signal?.aborted) return;
+        if (session !== this.session || airing.signal.aborted) return;
         await this.record(b);
         this.journalBreak(b);
         if (b.plan.kind !== 'headsup') void maybeNotionRecap(b.station).catch(() => undefined);

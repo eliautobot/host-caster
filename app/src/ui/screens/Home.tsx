@@ -15,7 +15,7 @@ import { Avatar, AvatarStack, Badge, Button, Card, Chip, EmptyState, IconButton,
 import { Page } from '../layout/Page';
 import { LikedCard, PlaylistCard } from '../library/cards';
 import '../library/library.css';
-import { TalkToHostsButton } from '../radio';
+import { CallButtons } from '../call/CallButtons';
 import { BreakCard } from '../radio/history/BreakCard';
 import { useBreaks } from '../radio/history/useBreaks';
 import '../radio/history/history.css';
@@ -133,15 +133,7 @@ export default function Home(_: ScreenProps) {
                   Go on air
                 </Button>
               )}
-              <TalkToHostsButton
-                size="lg"
-                label={
-                  <>
-                    <span className="aw-hero__long">Talk to the hosts</span>
-                    <span className="aw-hero__short">Call in</span>
-                  </>
-                }
-              />
+              <CallButtons variant="hero" />
               {onAir && <IconButton icon={Square} label="Stop the station" size="lg" onClick={() => radio.stop()} />}
               <IconButton icon={Pencil} label="Edit station" size="lg" onClick={() => navigate(`/stations/${station.id}`)} />
             </div>

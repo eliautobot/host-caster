@@ -11,6 +11,8 @@ const config: CapacitorConfig = {
   android: {
     // Self-hosted servers and local AI/voice boxes often speak plain http on the LAN.
     allowMixedContent: true,
+    // test builds only (HOSTCASTER_WEBVIEW_DEBUG=1 at cap sync): the WebView can be inspected over adb for phone tests
+    webContentsDebuggingEnabled: process.env.HOSTCASTER_WEBVIEW_DEBUG === '1',
     backgroundColor: '#0a0a0b',
   },
   ios: {

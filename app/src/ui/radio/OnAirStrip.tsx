@@ -1,12 +1,12 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { Flag, Mic } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Flag } from 'lucide-react';
 import { useHosts } from '@/state/hosts';
 import { usePlayer } from '@/state/player';
 import { useRadio } from '@/state/radio';
 import { useStation } from '@/state/stations';
-import { Avatar, AvatarStack, Button, IconButton, cx } from '../components';
+import { Avatar, AvatarStack, IconButton, cx } from '../components';
 import { lineup } from '../screens/parts/StationCard';
-import { CallInSheet } from './CallInSheet';
+import { CallButtons } from '../call/CallButtons';
 import { ReportBreakSheet, type ReportTarget } from './ReportBreakSheet';
 import './radio.css';
 
@@ -19,7 +19,7 @@ export interface OnAirStripProps {
 }
 
 /**
- * Live "ON AIR" strip: the speaking host's avatar, the live caption and "Talk to the hosts". Renders nothing when
+ * Live "ON AIR" strip: the speaking host's avatar, the live caption and Call / Message for the hosts. Renders nothing when
  * the station is off air (or, with when="talking", while only music plays), so the player chrome can always mount it.
  */
 export function OnAirStrip({ variant = 'sheet', when, className }: OnAirStripProps) {
@@ -28,7 +28,6 @@ export function OnAirStrip({ variant = 'sheet', when, className }: OnAirStripPro
   const all = useHosts((s) => s.hosts);
   const hosts = useMemo(() => (station ? lineup(all, station.hostIds) : []), [all, station]);
   const live = usePlayer((p) => Boolean(p.live));
-  const [callIn, setCallIn] = useState(false);
   const [report, setReport] = useState<ReportTarget>();
   const mode = when ?? (variant === 'mini' ? 'talking' : 'onair');
   const phase = r.phase ?? (r.onAir ? 'music' : 'off');
@@ -61,14 +60,10 @@ export function OnAirStrip({ variant = 'sheet', when, className }: OnAirStripPro
             onClick={() => setReport({ lines: toReport.lines, at: toReport.at, stationName: station?.name })}
           />
         )}
-        <Button size="sm" icon={Mic} onClick={() => setCallIn(true)} className="aw-onair__talk aw-onair__talk--full">
-          Talk to the hosts
-        </Button>
-        {/* narrow phones: the mic alone, so the host's name keeps its room */}
-        <IconButton icon={Mic} label="Talk to the hosts" size="sm" variant="solid" onClick={() => setCallIn(true)} className="aw-onair__talk aw-onair__talk--icon" />
+        <CallButtons variant="sheet" className="aw-onair__talk" />
       </span>
     ) : (
-      <IconButton icon={Mic} label="Talk to the hosts" size="sm" variant="solid" onClick={() => setCallIn(true)} />
+      <CallButtons variant="icons" />
     );
 
   return (
@@ -99,21 +94,7 @@ export function OnAirStrip({ variant = 'sheet', when, className }: OnAirStripPro
         </span>
         {talkButton}
       </section>
-      <CallInSheet open={callIn} onClose={() => setCallIn(false)} onOpen={() => setCallIn(true)} />
       {variant === 'sheet' && <ReportBreakSheet target={report} onClose={() => setReport(undefined)} />}
-    </>
-  );
-}
-
-/** A plain "Talk to the hosts" button that opens the call-in sheet (Home, Now Playing). */
-export function TalkToHostsButton(props: { size?: 'sm' | 'md' | 'lg'; variant?: 'primary' | 'secondary'; className?: string; label?: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button size={props.size ?? 'md'} variant={props.variant ?? 'secondary'} icon={Mic} className={props.className} onClick={() => setOpen(true)}>
-        {props.label ?? 'Talk to the hosts'}
-      </Button>
-      <CallInSheet open={open} onClose={() => setOpen(false)} onOpen={() => setOpen(true)} />
     </>
   );
 }

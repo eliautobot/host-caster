@@ -138,9 +138,12 @@ export function validateActions(actions: unknown[], ctx: LearnContext): CardActi
     if (typeof text !== 'string' || !text.trim()) continue;
     const k = (KINDS as string[]).includes(String(kind)) ? (kind as MemoryKind) : undefined;
     const fixed = withAbsoluteDate(clip(text, MAX_TEXT), ctx.now).text;
-    // a dated fact is a plan, and it ends with its date (the brain's, else the one they said, else the card's)
+    // a dated fact is a plan, and it ends with its last date (the brain's, the one they said, the card's own): "next
+    // weekend" said on a Monday may be read as this weekend or the one after, and a card never expires before the day
+    // its own words talk about
     const textDate = findDate(fixed, ctx.now);
-    const when = dateEnd(date, /weekend/i.test(`${fixed} ${ctx.said}`)) ?? (textDate || k === 'plans' ? (saidDate ?? textDate)?.end : undefined);
+    const ends = [dateEnd(date, /weekend/i.test(`${fixed} ${ctx.said}`)), ...(textDate || k === 'plans' ? [saidDate?.end, textDate?.end] : [])];
+    const when = ends.reduce<number | undefined>((a, b) => (b === undefined ? a : a === undefined ? b : Math.max(a, b)), undefined);
     const kindNow = when && (k === 'people' || k === 'about') ? 'plans' : k;
     if (op === 'update') {
       const card = typeof id === 'string' ? byId.get(id) : undefined;
