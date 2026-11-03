@@ -1,5 +1,6 @@
 // The listener's own words about Your list, read by code (works with every brain, the scripted fallback too):
 // "remind me to renew my license this month", "add oat milk to Your list", "I sent the quotes", "the bill is paid".
+import { isQuestionNotOrder } from '../agent/question'
 import { contentWords, toSecondPerson } from '../memory/text'
 import { resolveDue, resolveWhen, type WhenContext } from '../actions/when'
 import type { TrackedItem, TrackedKind } from '../types'
@@ -74,6 +75,8 @@ export function parseTrackerCommand(said: string, ctx: WhenContext): TrackerComm
     }
     const what = tidyWhat(body)
     if (!what || contentWords(what).length === 0) return undefined
+    // "can you add things to my Google Tasks?" is a question about what the hosts can do, not an item "Things"
+    if (isQuestionNotOrder(s, what)) return undefined
     const out: TrackerCommand = { op: 'add', what, kind: kindOf(what), google }
     if (whenPart) {
       const timed = /\b(at|@)\s*\d|\b\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)|\bnoon\b|\bmidnight\b|\bin \d+ (minutes|hours)\b/i.test(whenPart)
@@ -97,6 +100,8 @@ export function parseTrackerCommand(said: string, ctx: WhenContext): TrackerComm
     }
     return out
   }
+  // "did I send the quotes?" asks; it does not tick anything off
+  if (isQuestionNotOrder(s)) return undefined
   for (const re of DONE_RES) {
     const d = s.match(re)
     if (d && d[1] && d[1].length < 140) return { op: 'done', words: d[1] }

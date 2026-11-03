@@ -149,6 +149,28 @@ describe('desktop local helper', () => {
     assert.equal(readFileSync(join(dir, 'chatgpt.json'), 'utf8').includes('"tokens_enc":null'), true);
   });
 
+  test('signing out of Host-Caster ends and forgets the ChatGPT sign-in made on this PC', async () => {
+    enabled = true;
+    const before = new Set(fake.refreshes.keys());
+    const start = await (await post('/api/chatgpt/start', { fresh: true })).json();
+    const consent = await fetch(new URL(start.authorizeUrl), { redirect: 'manual' });
+    assert.equal((await fetch(consent.headers.get('location'))).status, 200);
+    assert.equal((await (await call('/api/chatgpt/status')).json()).connected, true);
+    const mine = () => [...fake.refreshes].filter(([t, r]) => !before.has(t) && !r.revoked).length;
+    assert.ok(mine() > 0);
+
+    // refused without the launch secret, like every helper route
+    assert.equal((await fetch(`${helper.url}/api/account/signed-out`, { method: 'POST' })).status, 401);
+    const res = await post('/api/account/signed-out');
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true });
+    assert.equal(mine(), 0, 'the refresh token was revoked');
+    assert.equal((await (await call('/api/chatgpt/status')).json()).connected, false);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'chatgpt.json'), 'utf8')), { accounts: [], state: {} });
+    // and again with nothing left: still fine
+    assert.equal((await post('/api/account/signed-out')).status, 200);
+  });
+
   test('a pasted address that is not the callback is refused', async () => {
     const res = await post('/api/chatgpt/finish', { url: 'https://example.com/auth/callback?code=x&state=y' });
     assert.equal(res.status, 400);

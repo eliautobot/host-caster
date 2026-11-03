@@ -79,6 +79,7 @@ Signing in is optional. When you do, the server keeps the following in one SQLit
 | `identities` | Each Google or X link: provider, account id, granted permissions, profile (name, email, photo) and the sign-in tokens (encrypted). |
 | `sessions` | One row per signed-in device: a hash of the session token, web or app, the browser or app name, created, last seen and expiry times. |
 | `sync_docs` | Your synced data as one document: hosts, stations, brains and voices (without keys), playlists (names only, no songs), About me and settings (including private calendar links you added). |
+| `sync_doc_revisions` | The last 20 versions of that document (`SYNC_DOC_REVISIONS`), each encrypted, with its time and size, so a sync that went wrong can be undone. Older ones are deleted on every sync; all go with your account. |
 | `secrets` | API keys for brains and voices, and your IMAP mailbox login (encrypted). |
 | `inbox` | Notes, segments, song requests and dates sent by AI apps, until the radio uses them (used items are cleaned up after about a week). |
 | `connector_tokens` | Your AI app connections: name, a hash of the token, the token itself (encrypted, so you can copy the URL again), last used time. |
@@ -107,7 +108,7 @@ keep a copy on the device too. Keys are never sent back to an app: apps only see
 
 - **Encrypted** with AES-256-GCM: API keys, the IMAP login, Google and X tokens, Notion tokens, ChatGPT sign-in
   tokens, AI app connection tokens, what your hosts remember about you and Your list (the memory cards and the list
-  items in your synced document), and the details of each action in the actions log. Each value is bound to its account and name, so it cannot be copied to another account. The key
+  items in your synced document), the kept past versions of your synced document, and the details of each action in the actions log. Each value is bound to its account and name, so it cannot be copied to another account. The key
   is `SECRET_KEY` (32 random bytes) or `DATA_DIR/secret.key`.
 - **Hashed** (cannot be turned back): session tokens, AI app tokens and action confirmations (SHA-256), passwords
   (scrypt), sign-in steps.
@@ -365,6 +366,7 @@ IP addresses, so keep them private and short, or set `LOG_LEVEL=warn`. Host-Cast
 
 | To delete | Where |
 | --- | --- |
+| Your account's data on one device | **Settings, Account, Sign out**. Anything not yet in your account is sent first (if the device cannot reach it, the app says so before going on). Then the device forgets the account: hosts, stations, AI brains and voices with their keys, About me, settings, Your list, what your hosts remember, Recently, the on-air history and call transcripts, playlists, songs from YouTube, Spotify, streams, Subsonic and the server library, the message thread, sign-in tokens (also the ChatGPT sign-in made in the desktop app), and every cache of calendar, mail, news and weather. It starts again like a first run and says "Your stations and settings are safe in your account." What belongs to the device stays: song files you added on it, music folders found on it (with their covers), player volume and crossfade, the theme and the server address. Those never go into the next account's synced library (files never sync). |
 | Everything on one device | **Settings, Data & storage, Delete data on this device** (also signs you out there; your account keeps its synced copy). Uninstalling the app or clearing the site's data in the browser does the same. |
 | Your account and everything the server keeps for it | **Settings, Account, Delete account**. Removes everything the server keeps for your account (every table above except the shared music library) and revokes Google, X and Notion access. The device you do it on keeps its local copy until you delete that too. |
 | One sign-in method | **Settings, Account, Unlink** (revokes its tokens). |

@@ -311,3 +311,45 @@ test('text helpers', () => {
   // the listener's own gray text stays
   assert.equal(pageSummary([{ type: 'paragraph', paragraph: { rich_text: [{ plain_text: 'gray but mine', annotations: { color: 'gray' } }] } }]), 'gray but mine');
 });
+
+test('notion.add as an action: proposed with a read-back, runs only after a yes, logged, undo trashes only that block', async (t) => {
+  const { app, u, notion } = await connectedWeb(t);
+  const home = notion.addPage('Home', [para('my own words')]);
+  const put = (await u.call('PUT', '/api/notion/settings', { write: { id: home, mode: 'new' } })).json();
+  const ours = notion.pages.get(put.settings.write.id);
+  const before = ours.blocks.length;
+  // strict payload: only a to-do or a note, the listener's words
+  assert.equal((await u.call('POST', '/api/actions/propose', { type: 'notion.add', payload: { kind: 'page', text: 'x' }, origin: 'call' })).statusCode, 400);
+  assert.equal((await u.call('POST', '/api/actions/propose', { type: 'notion.add', payload: { kind: 'todo', text: 'x', pageId: home }, origin: 'call' })).statusCode, 400);
+  const p = await u.call('POST', '/api/actions/propose', { type: 'notion.add', payload: { kind: 'todo', text: 'Order the oat milk' }, origin: 'call', said: 'put order the oat milk in Notion', tz: 'America/New_York' });
+  assert.equal(p.statusCode, 201, p.body);
+  const a = p.json().action;
+  assert.equal(a.level, 2);
+  assert.equal(a.summary, 'Add "Order the oat milk" as a to-do to your Notion page "Host-Caster".');
+  // nothing written by proposing
+  assert.equal(ours.blocks.length, before);
+  // an AI app never confirms
+  assert.equal((await u.call('POST', `/api/actions/${a.id}/confirm`, { via: 'ai-app', payloadHash: a.payloadHash })).statusCode, 400);
+  const c = (await u.call('POST', `/api/actions/${a.id}/confirm`, { via: 'call', payloadHash: a.payloadHash })).json();
+  assert.ok(c.token);
+  const ex = (await u.call('POST', `/api/actions/${a.id}/execute`, { token: c.token, payload: a.payload })).json();
+  assert.equal(ex.action.status, 'done', JSON.stringify(ex));
+  assert.equal(ours.blocks.length, before + 1);
+  assert.equal(ours.blocks.at(-1).type, 'to_do');
+  assert.equal(ours.blocks.at(-1).to_do.rich_text[0].text.content, 'Order the oat milk');
+  assert.match(ours.blocks.at(-1).to_do.rich_text[1].text.content, /on air/);
+  assert.equal(ex.action.undoable, true);
+  const log = (await u.call('GET', '/api/notion/activity')).json().items;
+  assert.equal(log[0].text, 'Order the oat milk');
+  // undo: only that block goes to the trash
+  const un = (await u.call('POST', `/api/actions/${a.id}/undo`, {})).json();
+  assert.equal(un.action.status, 'undone', JSON.stringify(un));
+  assert.equal(ours.blocks.filter((b) => !b.archived && !b.in_trash).length, before);
+  assert.equal(notion.pages.get(home).blocks[0].paragraph.rich_text[0].plain_text, 'my own words');
+  assert.equal((await u.call('GET', '/api/notion/activity')).json().items[0].status, 'undone');
+  // writes switched off: the proposal itself is refused with the reason
+  await u.call('PUT', '/api/notion/settings', { writesOn: false });
+  const off = await u.call('POST', '/api/actions/propose', { type: 'notion.add', payload: { kind: 'note', text: 'An idea' }, origin: 'chat' });
+  assert.equal(off.statusCode, 403);
+  assert.equal(off.json().error.code, 'notion_writes_off');
+});

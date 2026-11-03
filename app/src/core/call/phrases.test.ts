@@ -25,6 +25,12 @@ describe('call lines', () => {
   it('the pickup says the name and the station', () => {
     expect(pickupLine('Sam', 'Host-Caster', 0)).toBe("Hey Sam, you're on Host-Caster. What's up?");
     expect(pickupLine(undefined, 'Host-Caster', 0)).toBe("Hey, you're on Host-Caster. What's up?");
+    // every variant, with and without a name: the station always, the listener whenever there is a name
+    for (let seed = 0; seed < 40; seed++) {
+      expect(pickupLine('Sam', 'Call FM', seed / 40)).toMatch(/Sam[\s\S]*Call FM|Call FM[\s\S]*Sam/);
+      expect(pickupLine(undefined, 'Call FM', seed / 40)).toMatch(/Call FM/);
+    }
+    expect(new Set(Array.from({ length: 40 }, (_, seed) => pickupLine('Sam', 'Call FM', seed / 40))).size).toBeGreaterThanOrEqual(3);
     expect(stillThereLine('Sam', 0)).toBe('Sam, you still there?');
     expect(signOffLine('Sam', 0)).toMatch(/Sam/);
   });

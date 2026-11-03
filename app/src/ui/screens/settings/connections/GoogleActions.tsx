@@ -23,14 +23,14 @@ const ROWS: { kind: Kind; icon: typeof CalendarPlus; label: string; on: string; 
     kind: 'calendar',
     icon: CalendarPlus,
     label: 'Hosts can add to my calendar',
-    on: 'Adds events and answers invitations on Google Calendar, only after you say yes or tap Yes. Events never invite anyone. An invitation from someone new stays in Gmail until you answer it there.',
+    on: 'Adds, moves, renames and deletes your own events and answers invitations, only after you say yes or tap Yes. New events never invite anyone; when an event has guests, Google tells them about a change. An invitation from someone new stays in Gmail until you answer it there.',
     off: 'Asks Google to let Host-Caster add events to your calendar.',
   },
   {
     kind: 'tasks',
     icon: ListChecks,
     label: 'Hosts can use my Google Tasks',
-    on: 'Your open tasks show up in Your list. Adding, ticking off or changing a task happens only after you say yes or tap Yes.',
+    on: 'Your open tasks show up in Your list. Adding, ticking off, changing, moving or deleting a task happens only after you say yes or tap Yes.',
     off: 'Asks Google to let Host-Caster read and change your Google Tasks.',
   },
 ];
@@ -121,7 +121,7 @@ export function GoogleActions({ scopes }: { scopes: string[] }) {
 
   return (
     <div className="aw-gactions">
-      <p className="aw-gactions__head">What your hosts can do</p>
+      <p className="aw-gactions__head">What your hosts may change in Google</p>
       <div className="aw-acct-rows">
         {ROWS.map((r) => {
           const missing = on(r.kind) && !granted(r.kind);
@@ -150,7 +150,7 @@ export function GoogleActions({ scopes }: { scopes: string[] }) {
         })}
       </div>
       <p className="aw-gactions__note">
-        Nothing is written to Google until you say yes on a call-in or tap Yes. Your hosts never send mail, pay, delete or invite anyone.{' '}
+        Nothing changes in Google until you say yes or tap Yes. Your hosts never send or delete mail, pay or invite anyone.{' '}
         {(on('calendar') || on('tasks')) && (
           <Link to="/list?view=done" className="aw-gactions__link">
             See what they did

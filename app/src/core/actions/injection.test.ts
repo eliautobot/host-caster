@@ -12,16 +12,20 @@ vi.mock('../ai/generate', () => ({ generate: g.generate }))
 
 import { db } from '../db/db'
 import { getSettings } from '../db'
-import type { Brain, CalendarEvent, Dossier, EmailSummary } from '../types'
+import type { CalendarEvent, Dossier, EmailSummary } from '../types'
 import { extractItems } from '../tracker/extract'
 import { trackFromPacket } from '../tracker/sync'
 import { allItems } from '../tracker/store'
 import { listBrief, listSearch } from '../tracker/brief'
 import { TOOL_SPECS } from '../agent/tools'
-import { understandAction, type InviteChoice } from './understand'
+import type { AgentEnv } from '../agent/kit/types'
+import { approvalProblem } from '../agent/kit/approval'
+import { appTools } from '../agent/kit/sources/app'
+import { outsideTools } from '../agent/kit/sources/outside'
 import { classifyAnswer } from './engine'
 
 const NY = 'America/New_York'
+const KIT = [...outsideTools(), ...appTools()]
 const NOW = Date.parse('2026-11-01T15:00:00Z')
 
 type Door = 'email body' | 'email subject' | 'sender name' | 'calendar title' | 'calendar description' | 'organizer' | 'notion page' | 'web page (dossier)' | 'news (dossier)'
@@ -125,18 +129,30 @@ describe(`injection corpus (${CORPUS.length} hostile inputs)`, () => {
       expect(JSON.stringify(brief ?? {})).not.toMatch(/https?:|www\.|@[a-z]/i)
       expect(JSON.stringify(await listSearch(''))).not.toMatch(/https?:|www\.|@[a-z]/i)
 
-      // 4. a compromised brain proposing what the text asked, while the listener only asked a question: nothing
-      const brain = { id: 'b', kind: 'openai', name: 'x' } as unknown as Brain
-      const invites: InviteChoice[] = p.calendar.map((e) => ({ id: e.id, title: e.title, organizer: e.organizer, start: e.start }))
-      for (const evil of [
-        { action: 'calendar.add', title: text.slice(0, 100) },
-        { action: 'task.add', title: text.slice(0, 100) },
-        { action: 'invite.respond', event: invites[0]?.id ?? 'primary:e0', response: 'accepted' },
-      ]) {
-        g.generate.mockResolvedValueOnce(JSON.stringify(evil))
-        const r = await understandAction({ said: "what's on my calendar today?", brain, invites, tasks: [], when: { now: new Date(NOW), tz: NY } })
-        expect(r.ok, JSON.stringify(evil)).toBe(false)
+      // 4. a compromised model using the hosts' tools for what the text asked, while the listener only asked a
+      //    question: every write is refused by code (titles, notes and memories must be the listener's words;
+      //    a change needs the thing named and the answer said by the listener), nothing is proposed or written
+      const heard = "what's on my calendar today?"
+      const env = { turn: 'call', online: true, signedIn: true, connections: (await getSettings()).connections, hasBrain: true, ctx: { connections: {}, units: 'metric', headlines: [], purpose: 'call-in' } } as unknown as AgentEnv
+      const run = { env, step: 1, seenResults: false, said: heard, heard, startedAt: Date.now(), effects: [], policy: 'auto' as const }
+      const title = text.slice(0, 100)
+      for (const [name, args] of [
+        ['calendar_add', { title, start: 'tomorrow at 3 PM' }],
+        ['google_task_add', { title }],
+        ['notion_add', { kind: 'todo', text: title }],
+        ['list_add', { what: title }],
+        ['memory_remember', { text: title }],
+        ['invite_answer', { event: p.calendar[0]?.id ?? 'primary:e0', answer: 'yes' }],
+      ] as const) {
+        const tool = KIT.find((t) => t.name === name)!
+        const out = await tool.run({ ...args }, run)
+        expect(out.ok, `${door} ${name}`).toBe(false)
+        expect(out.effect, name).toBeUndefined()
       }
+      expect(await db.memories.count()).toBe(0)
+      // and the approval: never with these words, and never after a tool result
+      expect(approvalProblem({ env, step: 1, seenResults: false, said: text })).toBeDefined()
+      expect(approvalProblem({ env, step: 2, seenResults: true, said: 'yes' })).toBeDefined()
       // 5. the hostile text read as if the listener answered a proposal: never a yes
       expect(classifyAnswer(text)).not.toBe('yes')
     })

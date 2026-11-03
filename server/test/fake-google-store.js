@@ -163,8 +163,13 @@ export function createGoogleWrites(opts = {}) {
         return { status: 204 };
       }
       if (method === 'PATCH' || method === 'PUT') {
-        if (ev.status === 'cancelled') return { status: 410, body: gerr(410, 'Resource has been deleted', 'deleted') };
         const patch = JSON.parse(body || '{}');
+        // like Google: the organizer can bring back an event they deleted (it waits in the bin)
+        if (ev.status === 'cancelled' && ev.organizer?.self && patch.status === 'confirmed') {
+          Object.assign(ev, patch, { updated: iso(Date.now()), etag: etag(), sequence: (ev.sequence ?? 0) + 1 });
+          return { status: 200, body: ev };
+        }
+        if (ev.status === 'cancelled') return { status: 410, body: gerr(410, 'Resource has been deleted', 'deleted') };
         // like Google: a guest can change only their own answer, never the guest list or anyone else's entry
         if (!ev.organizer?.self && patch.attendeesOmitted) {
           // only the listener's own entry comes back: it replaces theirs, everyone else stays
@@ -296,6 +301,20 @@ export function createGoogleWrites(opts = {}) {
       }
       return undefined;
     }
+    // tasks.move with destinationTasklist: the task (same id) goes to the end of the other list
+    const moveTask = /^\/gapi\/tasks\/v1\/lists\/([^/]+)\/tasks\/([^/]+)\/move$/.exec(p);
+    if (moveTask && method === 'POST') {
+      if (!can.tasksWrite(w)) return insufficient();
+      const list = listOf(decodeURIComponent(moveTask[1]));
+      const task = list && state.tasks.find((t) => t.listId === list.id && t.id === decodeURIComponent(moveTask[2]) && !t.deleted);
+      if (!task) return notFound();
+      const dest = q.destinationTasklist ? listOf(q.destinationTasklist) : list;
+      if (!dest) return notFound();
+      task.listId = dest.id;
+      task.selfLink = `https://www.googleapis.com/tasks/v1/lists/${dest.id}/tasks/${task.id}`;
+      touchTask(task);
+      return { status: 200, body: publicTask(task) };
+    }
     const oneTask = /^\/gapi\/tasks\/v1\/lists\/([^/]+)\/tasks\/([^/]+)$/.exec(p);
     if (oneTask) {
       const list = listOf(decodeURIComponent(oneTask[1]));
@@ -426,7 +445,7 @@ export function createGoogleWrites(opts = {}) {
       inserts: { ...state.inserts },
       faults: state.faults.map((f) => ({ match: f.re.source, left: f.left, ...(f.status ? { status: f.status } : {}), ...(f.delayMs ? { delayMs: f.delayMs } : {}), ...(f.drop ? { drop: f.drop } : {}) })),
       items: {
-        events: state.events.map((e) => ({ id: e.id, summary: e.summary, status: e.status ?? 'confirmed', ...(e.attendees ? { attendees: e.attendees.map((a) => ({ email: a.email, responseStatus: a.responseStatus, ...(a.self ? { self: true } : {}), ...(a.comment ? { comment: a.comment } : {}) })) } : {}) })),
+        events: state.events.map((e) => ({ id: e.id, summary: e.summary, status: e.status ?? 'confirmed', start: e.start?.dateTime ?? e.start?.date, ...(e.location ? { location: e.location } : {}), ...(e.attendees ? { attendees: e.attendees.map((a) => ({ email: a.email, responseStatus: a.responseStatus, ...(a.self ? { self: true } : {}), ...(a.comment ? { comment: a.comment } : {}) })) } : {}) })),
         tasks: state.tasks.map((t) => ({ id: t.id, listId: t.listId, title: t.title, status: t.status, ...(t.due ? { due: t.due } : {}), ...(t.deleted ? { deleted: true } : {}) })),
       },
       requests: state.requests.slice(-300),
@@ -457,6 +476,23 @@ export function createGoogleWrites(opts = {}) {
     }
     if (p === '/fixture/state' && req.method === 'GET') {
       send(res, 200, snapshot());
+      return true;
+    }
+    // seed open tasks for a test: POST /fixture/tasks [{ title, list?: 'Home', due?: 'YYYY-MM-DD' }]
+    if (p === '/fixture/tasks' && req.method === 'POST') {
+      let list;
+      try {
+        list = JSON.parse(body || '[]');
+      } catch {
+        send(res, 400, { error: 'send a list of tasks' });
+        return true;
+      }
+      for (const one of Array.isArray(list) ? list : [list]) {
+        const l = state.lists.find((x) => x.title === one.list) ?? state.lists[0];
+        const id = Buffer.from(`fx${state.tasks.length}${String(one.title)}`.replace(/[^A-Za-z0-9]/g, '').padEnd(16, '0').slice(0, 16)).toString('base64url');
+        state.tasks.push({ kind: 'tasks#task', id, etag: `"${id}"`, title: String(one.title), updated: new Date().toISOString(), position: String(state.tasks.length).padStart(20, '0'), status: 'needsAction', listId: l.id, ...(one.due ? { due: `${one.due}T00:00:00.000Z` } : {}) });
+      }
+      send(res, 200, { tasks: state.tasks.length });
       return true;
     }
     return false;

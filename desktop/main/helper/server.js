@@ -137,6 +137,13 @@ export async function startHelper(opts) {
     },
     'GET /api/chatgpt/models': async () => ({ models: await svc.models(LOCAL_USER) }),
     'POST /api/chatgpt/disconnect': async () => svc.disconnect(LOCAL_USER),
+    // the person signed out of Host-Caster: their ChatGPT sign-in on this PC ends (best effort) and is forgotten, so
+    // the next account signing in here never runs on it
+    'POST /api/account/signed-out': async () => {
+      await svc.forgetUser(LOCAL_USER).catch(() => undefined);
+      store.clear();
+      return { ok: true };
+    },
     'POST /api/ai/chat': async (body) => {
       const brain = body.brain ?? {};
       if (brain.kind !== undefined && brain.kind !== 'chatgpt') throw new HelperError(400, 'unsupported_brain', 'This helper runs ChatGPT plan brains only');

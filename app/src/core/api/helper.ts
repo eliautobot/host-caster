@@ -1,6 +1,6 @@
 // The desktop app's local helper (core/native/desktop.ts), called like the server: JSON in and out, errors as
 // { error: { code, message } } turned into ApiError, so callers handle both the same way.
-import { helperFetch } from '../native/desktop';
+import { desktop, helperFetch } from '../native/desktop';
 import { ApiError } from './client';
 
 export async function helperRequest<T>(
@@ -40,4 +40,13 @@ export async function helperRequest<T>(
     throw new ApiError(res.status, code, message);
   }
   return (await res.json()) as T;
+}
+
+/**
+ * Desktop app, signing out: the helper ends and forgets the ChatGPT sign-in made on this PC (it belongs to the person,
+ * and the next account must not use it). Elsewhere, or with the helper gone, nothing to do.
+ */
+export async function forgetHelperSignIns(): Promise<void> {
+  if (!desktop) return;
+  await helperRequest('POST', '/api/account/signed-out', undefined, { timeoutMs: 10_000 }).catch(() => undefined);
 }

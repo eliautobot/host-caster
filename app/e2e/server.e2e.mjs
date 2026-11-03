@@ -288,17 +288,28 @@ try {
   check('backup restored', await visible(page.getByText('Backup restored')));
   await page.waitForLoadState('load');
   await wait(2000);
+  // a restored backup never belonged to the account on this device: when it holds songs or records of its own, the
+  // app asks once whether they join the account (this backup came from the same account)
+  if (await visible(page.locator('[data-testid="join-question"]'), 5000)) {
+    await page.getByRole('button', { name: 'Add them' }).click();
+    await wait(1500);
+  }
 
-  // sign out keeps local data
+  // sign out: the account's data leaves this device (it stays in the account), a clean first run
   await page.goto(`${base}/#/settings/account`);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  check('signed out, the data is safe in the account', await visible(page.getByText('Your stations and settings are safe in your account.'), 15000));
+  await page.goto(`${base}/#/settings/account`);
   check('signed out', await visible(page.getByText('You are in local mode')));
-  check('local profile kept after sign-out', (await page.locator('.aw-settings__me').innerText()).includes('Sam'));
+  await page.goto(`${base}/#/settings`);
+  check('the account profile left the device after sign-out', !(await page.locator('.aw-settings__me').innerText()).includes('Sam'));
 
-  // sign back in with Google: same account (Google identity is linked)
+  // sign back in with Google: same account (Google identity is linked), its data comes back
   await page.goto(`${base}/#/sign-in`);
   await page.getByRole('button', { name: 'Continue with Google' }).click();
   check('Google sign-in returns', await visible(page.getByText(/Signed in as Sam Rivers/), 15000));
+  await page.goto(`${base}/#/settings`);
+  check('the account profile is back after signing in', await visible(page.locator('.aw-settings__me', { hasText: 'Sam' }), 15000));
   await ctx.close();
 
   // ---------------------------------------------------------------------------------------------- new device, X sign-in, delete
@@ -319,6 +330,8 @@ try {
   fake.state.denyNext = true;
   await p2.goto(`${base}/#/settings/account`);
   await p2.getByRole('button', { name: 'Sign out', exact: true }).click();
+  // signing out restarts the app on a clean first run
+  await visible(p2.getByText('Your stations and settings are safe in your account.'), 15000);
   await p2.goto(`${base}/#/sign-in`);
   await p2.getByRole('button', { name: 'Continue with Google' }).click();
   check('cancelled consent shows a clear error', await visible(p2.getByText('You cancelled the sign-in.'), 15000));

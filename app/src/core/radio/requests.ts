@@ -1,6 +1,7 @@
 // Song requests: "play Dreams by Fleetwood Mac" in a call-in, or request_song from an AI app (MCP inbox). The radio
 // finds the song in the station's queue or the library and plays it next; the hosts confirm it, or say kindly that
 // it is not in the listener's music. Matching is by words, so "can you play some fleetwood mac" also works.
+import { isQuestionNotOrder } from '../agent/question';
 import { getInbox, markInboxUsed } from '../context/sources';
 import { getSettings, listTracks } from '../db';
 import { player } from '../player';
@@ -36,7 +37,8 @@ export function isMood(query: string): boolean {
 
 /** True when the text asks for music ("play ...", "can we hear ..."). */
 export function isSongRequest(text: string): boolean {
-  return INTENT.test(text);
+  // "can you play songs?" / "how do I play music?": questions, never a request
+  return INTENT.test(text) && !isQuestionNotOrder(text, requestQuery(text));
 }
 
 /** The words that name the song or artist: "Could you play Dreams by Fleetwood Mac next?" -> "dreams by fleetwood mac". */
@@ -92,6 +94,15 @@ export async function queueRequest(query: string, currentId?: string): Promise<S
   if (!track) return { query };
   await player.playNext([track]);
   return { query, found: summary(track) };
+}
+
+/** A song the hosts' play_song tool picked by id (from music_search), else by words; plays next. */
+export async function queueTrack(trackId: string | undefined, query: string, currentId?: string): Promise<SongRequest> {
+  const pool = [...player.state.queue, ...(await listTracks())];
+  const track = trackId ? pool.find((t) => t.id === trackId) : undefined;
+  if (!track) return query.trim() ? queueRequest(query, currentId) : { query: trackId ?? '' };
+  await player.playNext([track]);
+  return { query: query || track.title, found: summary(track) };
 }
 
 /** The oldest song request an AI app sent (request_song over MCP), queued next; marked used either way. */

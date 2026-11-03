@@ -103,7 +103,8 @@ export function dropReason(said: string, t: ActionTurn): 'repeat' | 'asks' | 'cl
   const sentence = straight(said)
   if (repeatsLine(sentence, straight(t.line))) return 'repeat'
   if (/\?|\byes or no\b/i.test(t.line) && /\?/.test(sentence) && ASKS_AGAIN.test(sentence)) return 'asks'
-  if (t.kind === 'asked' && CANT.test(sentence)) return 'claims'
+  // "I can't accept it": the code's line says why (an invitation Google holds) or asks; the model never refuses for it
+  if ((t.kind === 'asked' || t.kind === 'held') && CANT.test(sentence)) return 'claims'
   if (NOTHING_HAPPENED.has(t.kind) && CLAIMS.test(sentence)) {
     // the listener's own list changed (an item added or ticked off) even when Google waits for a yes
     if (t.kind === 'asked' && t.item && /\b(?:your|the) list\b/i.test(sentence) && !/\bgoogle\b/i.test(sentence)) return 'repeat'

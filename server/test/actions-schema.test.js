@@ -17,6 +17,11 @@ const VALID = {
   'task.complete': { listId: 'MTAzNzEyNDA4MjM0NTA2NDgwOTg6MDow', taskId: 'cGhyczhLeFFMclRSR2JsSQ', title: 'Send the quotes' },
   'task.edit': { listId: 'MTAzNzEyNDA4MjM0NTA2NDgwOTg6MDow', taskId: 'cGhyczhLeFFMclRSR2JsSQ', title: 'New', due: null, notes: 'x' },
   'invite.respond': { calendarId: 'primary', eventId: 'q4review7nkl3lnqohsgg9inv', response: 'declined', note: 'Sorry, out that day' },
+  'task.delete': { listId: 'MTAzNzEyNDA4MjM0NTA2NDgwOTg6MDow', taskId: 'cGhyczhLeFFMclRSR2JsSQ', title: 'Send the quotes' },
+  'task.move': { listId: 'MTAzNzEyNDA4MjM0NTA2NDgwOTg6MDow', taskId: 'cGhyczhLeFFMclRSR2JsSQ', title: 'Send the quotes', toListId: '@default' },
+  'calendar.update': { calendarId: 'primary', eventId: 'q4review7nkl3lnqohsgg9inv', title: 'Dentist', allDay: false, start: '2026-11-03T15:00:00-05:00', end: '2026-11-03T16:00:00-05:00', timeZone: 'America/New_York', location: '12 Main St' },
+  'calendar.delete': { calendarId: 'primary', eventId: 'q4review7nkl3lnqohsgg9inv', title: 'Dentist' },
+  'notion.add': { kind: 'todo', text: 'Order the oat milk' },
 };
 
 function refuses(type, payload, field, msg = '') {
@@ -155,10 +160,10 @@ test('schemas: calendar.add times (offsets, past with 2 minutes grace, 24 hours,
 });
 
 test('schemas: never-allowed types', () => {
-  for (const type of ['mail.forward', 'mail.delete', 'payment.send', 'purchase.make', 'calendar.invite', 'calendar.update', 'event.delete', 'drive.share', 'list.add', 'reminder.add', 'Task.Add', 'task.add\u0000', 'hasOwnProperty', '__proto__', '', undefined, null, 7, {}, []]) {
+  for (const type of ['mail.forward', 'mail.delete', 'payment.send', 'purchase.make', 'calendar.invite', 'calendar.share', 'calendar.attendees', 'event.delete', 'task.share', 'drive.share', 'list.add', 'reminder.add', 'Task.Add', 'task.add\u0000', 'hasOwnProperty', '__proto__', '', undefined, null, 7, {}, []]) {
     assert.throws(() => normalize(type, { title: 'x' }), (err) => err.code === 'action_not_allowed' && err.statusCode === 400, String(type));
   }
-  assert.deepEqual(Object.keys(TYPES).sort(), ['calendar.add', 'invite.respond', 'task.add', 'task.complete', 'task.edit']);
+  assert.deepEqual(Object.keys(TYPES).sort(), ['calendar.add', 'calendar.delete', 'calendar.update', 'invite.respond', 'notion.add', 'task.add', 'task.complete', 'task.delete', 'task.edit', 'task.move']);
 });
 
 /** a small deterministic random source */
@@ -205,6 +210,11 @@ test('schemas: 3000 fuzzed payloads either come back clean or are refused with a
     'task.complete': ['listId', 'taskId', 'title'],
     'task.edit': ['listId', 'taskId', 'title', 'due', 'notes'],
     'invite.respond': ['calendarId', 'eventId', 'response', 'note'],
+    'task.delete': ['listId', 'taskId', 'title'],
+    'task.move': ['listId', 'taskId', 'title', 'toListId'],
+    'calendar.update': ['calendarId', 'eventId', 'title', 'allDay', 'start', 'end', 'timeZone', 'location'],
+    'calendar.delete': ['calendarId', 'eventId', 'title'],
+    'notion.add': ['kind', 'text'],
   };
   let accepted = 0;
   for (let i = 0; i < 3000; i++) {

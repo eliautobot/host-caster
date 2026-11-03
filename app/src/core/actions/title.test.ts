@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanTitle, parseOffline, titleWithoutWhen } from './understand'
+import { cleanTitle, titleWithoutWhen } from './title'
 
 // [what the model wrote as the title, what the listener said, the title we keep]
 const TABLE: Array<[string, string, string, ('event' | 'task')?]> = [
@@ -52,9 +52,7 @@ describe('titles: no day, time or dangling word is left behind', () => {
     expect(titleWithoutWhen('by Friday')).toBe('')
   })
 
-  it('the offline reader understands "add a Google task to ..."', () => {
-    const r = parseOffline('Add a Google task to test Host-Caster tasks by Friday')
-    expect(r.action).toBe('task.add')
-    expect(cleanTitle(r.title, 'Add a Google task to test Host-Caster tasks by Friday', 'task')).toBe('Test Host-Caster tasks')
+  it('"add a Google task to ..." keeps only the task', () => {
+    expect(cleanTitle('add a Google task to test Host-Caster tasks by Friday', 'Add a Google task to test Host-Caster tasks by Friday', 'task')).toBe('Test Host-Caster tasks')
   })
 })

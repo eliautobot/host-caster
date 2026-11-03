@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEVICE_VOICE_ID } from '../types';
-import { SEED_IDS, db, deleteHost, getProfile, getSettings, initDb, listHosts, listStations, saveHost } from './index';
+import { SEED_IDS, db, deleteHost, getProfile, getSettings, initDb, listHosts, listStations, saveHost, saveProfile, saveSettings, saveStation } from './index';
 
 describe('db seed', () => {
   beforeEach(async () => {
@@ -39,4 +39,18 @@ describe('db seed', () => {
     expect(copy.id).not.toBe(maya.id);
     expect(copy.createdAt).toBeGreaterThan(0);
   });
+
+  it('a save that changes nothing is not an edit (the starter stays untouched for sync)', async () => {
+    const [maya] = await listHosts();
+    const [station] = await listStations();
+    const before = { host: maya!.updatedAt, station: station!.updatedAt, profile: (await getProfile()).updatedAt, settings: (await getSettings()).updatedAt };
+    await new Promise((r) => setTimeout(r, 5));
+    expect((await saveHost({ ...maya! })).updatedAt).toBe(before.host);
+    expect((await saveStation({ ...station! })).updatedAt).toBe(before.station);
+    expect((await saveProfile({ name: '' })).updatedAt).toBe(before.profile);
+    expect((await saveSettings({ theme: (await getSettings()).theme })).updatedAt).toBe(before.settings);
+    expect((await saveHost({ ...maya!, name: 'Maya!' })).updatedAt).toBeGreaterThan(before.host);
+    expect((await saveProfile({ name: 'Sam' })).updatedAt).toBeGreaterThan(before.profile);
+  });
 });
+

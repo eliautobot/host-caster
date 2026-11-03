@@ -5,7 +5,7 @@ import { isFallback, realBrainId, resolveBrain } from '../ai/brains';
 import { generate } from '../ai/generate';
 import { isLocal } from '../ai/openai';
 import { buildContext, summarize } from '../context/context';
-import { answerFollowUp } from '../agent/followup';
+import { answerFollowUp, type FollowUp } from '../agent/followup';
 import type { MemoryChange } from '../memory/commands';
 import type { ActionTurn } from '../actions/callin';
 import { linesAroundAction } from '../actions/echo';
@@ -21,6 +21,7 @@ import { speak } from '../voice/voice';
 import { writeBuiltinBreak } from './builtin';
 import { planBreak, type BreakKind, type BreakPlan } from './planner';
 import type { NotionWrite } from './notionAsk';
+import { stationHost } from './notionWrite';
 import type { SongRequest } from './requests';
 import { writeBreak, writeMode, type WriteMode, type WrittenBreak } from './writer';
 import { noteVoiceMs, planAirTime, type RelativeTime, type TimeLine } from './airtime';
@@ -80,6 +81,8 @@ export interface PrepareInput {
   memory?: MemoryChange;
   /** Your list / an action from the call (core/actions/callin.ts): its exact line closes the break */
   action?: ActionTurn;
+  /** the call-in's answer, already written by the hosts' agent turn (radio/callinAgent.ts) */
+  answer?: FollowUp;
 }
 
 /** a call-in question gets this long for its live lookups, then the hosts answer with what they have */
@@ -183,12 +186,13 @@ async function prepareWith(input: PrepareInput, t0: number, hosts: Host[], brain
   packet.inboxAnswers = inboxReady.answers;
   // a call-in question about something on air: looked up now (about 20 s at most)
   const followUp =
-    input.kind === 'callin' && input.callIn && !input.request && !input.notion && !input.action
+    input.answer ??
+    (input.kind === 'callin' && input.callIn && !input.request && !input.notion && !input.action
       ? await answerFollowUp({ said: input.callIn, packet, hosts, brains, settings: await getSettings(), deadline: Date.now() + FOLLOW_UP_MS, signal, onLookup: input.onLookup }).catch((err) => {
           if (signal?.aborted) throw err;
           return undefined;
         })
-      : undefined;
+      : undefined);
   // what the hosts remember: the patterns steer the plan, then the cards and the journal for its topics
   packet.memory = { facts: [], recently: [], ids: [], quieter: await quieterNow(airAt).catch(() => []) };
   const plan = planBreak(station, packet, packet.recentBreaks, { kind: input.kind, callIn: input.callIn, hostCount: hosts.length, request: input.request, notion: input.notion, followUp, memory: input.memory, action: input.action, now: airAt });
@@ -289,7 +293,10 @@ async function prepareWith(input: PrepareInput, t0: number, hosts: Host[], brain
   void researchDesk.schedule(station, { ...packet, inbox: fullInbox }).catch(() => undefined);
   // Your list: items from what the hosts just read (events, mail, Notion, dossiers) and Google Tasks, in the background
   void trackFromPacket(packet).catch(() => undefined);
-  // notes from the listener's AI app are their own words: remembered like a call-in
-  void memoryFromInbox(fullInbox, station.id).catch(() => undefined);
+  // notes from the listener's AI app are their own words: journaled; with an AI brain the agent remembers (inbox.ts)
+  void stationHost(station)
+    .catch(() => undefined)
+    .then((who) => memoryFromInbox(fullInbox, station.id, { agent: Boolean(who) }))
+    .catch(() => undefined);
   return b;
 }

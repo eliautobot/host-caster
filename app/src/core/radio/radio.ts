@@ -15,14 +15,17 @@ import { skippedNotice, standInNotice } from './notice';
 import { deviceStandIn, loadLineup, prepareBreak, warmUpBrains, type PreparedBreak } from './prepare';
 import { speak } from '../voice/voice';
 import { extendQueue, stationQueue } from './queue';
-import { isMood, isSongRequest, nextInboxRequest, queueRequest, requestQuery, type SongRequest } from './requests';
+import { isMood, isSongRequest, nextInboxRequest, queueRequest, queueTrack, requestQuery, type SongRequest } from './requests';
+import type { MusicHooks } from '../agent/kit/types';
 import type { NotionWrite } from './notionAsk';
 import { learnFromWords, memoryOnPlay, noteBreak, noteGotIt, noteHeadsUp, noteRequested, noteSaid, startMemory, takeMemoryCommand, type MemoryChange } from '../memory';
-import { maybeNotionRecap, nextInboxNotionWrite, stationBrain, takeNotionWrite } from './notionWrite';
+import { maybeNotionRecap, takeNotionWrite } from './notionWrite';
 import { takeActionTurn, type ActionTurn } from '../actions/callin';
 import { addItem } from '../tracker/store';
 import { markListAired } from '../tracker/brief';
-import { nextInboxAction } from '../actions/inbox';
+import { nextInboxTurn } from '../actions/inbox';
+import type { FollowUp } from '../agent/followup';
+import { callInTurn } from './callinAgent';
 
 /** start writing this long before the song ends (slow local models need the head start) ... */
 const PREP_LEAD_MS = 80_000;
@@ -223,24 +226,11 @@ class Radio {
       await snoozeLast().catch(() => undefined);
       void noteGotIt(said);
     }
-    // what they said goes in the journal; "remember that ..." / "forget that ..." is done now, so the answer confirms it
+    // what they said goes in the journal
     if (prompt?.trim()) void noteSaid(said);
-    const memory = prompt?.trim() ? await takeMemoryCommand(said, 'call').catch(() => undefined) : undefined;
     this.set({ phase: 'preparing', speakingHostId: undefined, caption: undefined, notice: undefined, noticeLink: undefined });
     // the song under the call-in, so the hosts can name what is playing
     const under = this.anyAppMode ? this.anyAppPrev : this.current;
-    const request = await this.takeRequest(said);
-    // "add oat milk to my list": added to Notion now, so the answer can confirm it
-    // words about the calendar, Google Tasks or an invitation are for the actions engine, never a Notion note
-    const forActions = /\b(calendar|google tasks?|invite|invitation|rsvp)\b/i.test(said) && !/\bnotion\b/i.test(said);
-    const notion = forActions ? undefined : await takeNotionWrite(said, station).catch(() => undefined);
-    // a Notion to-do is also on Your list (the listener's own words)
-    if (notion?.ok && notion.kind === 'todo') void addItem({ what: notion.text, kind: 'todo', source: { type: 'you', label: 'You said it on a call-in (also in Notion)' } }).catch(() => undefined);
-    // Your list ("remind me to ...", "I sent the quotes") and things the hosts can do once the listener says yes
-    const action =
-      prompt?.trim() && !request && !notion
-        ? await takeActionTurn({ said, origin: 'call-in', brain: await stationBrain(station).catch(() => undefined) }).catch(() => undefined)
-        : undefined;
     // a question that needs a live lookup: if the answer is not ready in a moment, a host says so first
     let hold: Promise<void> | undefined;
     let settled = false;
@@ -248,7 +238,22 @@ class Radio {
       this.later(() => {
         if (!settled && !hold && session === this.session) hold = this.sayHoldLine(station).catch(() => undefined);
       }, HOLD_LINE_AFTER_MS);
-    const ready = await this.prepare(station, 'callin', said, new AbortController(), under, undefined, undefined, request, undefined, notion, onLookup, memory, action);
+    // with an AI brain, one agent turn does what they asked with the hosts' tools and writes the answer (agent/kit)
+    const turn = prompt?.trim() ? await callInTurn(station, said, { music: this.musicHooks(), onLookup }).catch(() => undefined) : undefined;
+    let { memory, request, notion, action } = turn ?? {};
+    if (!turn && prompt?.trim()) {
+      // the scripted fallback's plain command reader: "remember that ...", "play ...", a Notion note, Your list
+      memory = await takeMemoryCommand(said, 'call').catch(() => undefined);
+      request = memory ? undefined : await this.takeRequest(said);
+      // words about the calendar, Google Tasks or an invitation are for the actions engine, never a Notion note
+      const forActions = /\b(calendar|google tasks?|invite|invitation|rsvp)\b/i.test(said) && !/\bnotion\b/i.test(said);
+      notion = memory || request || forActions ? undefined : await takeNotionWrite(said, station).catch(() => undefined);
+      // a Notion to-do is also on Your list (the listener's own words)
+      if (notion?.ok && notion.kind === 'todo') void addItem({ what: notion.text, kind: 'todo', source: { type: 'you', label: 'You said it on a call-in (also in Notion)' } }).catch(() => undefined);
+      // Your list ("remind me to ...", "I sent the quotes") and a yes or no to what the hosts asked before
+      action = !memory && !request && !notion ? await takeActionTurn({ said, origin: 'call-in' }).catch(() => undefined) : undefined;
+    }
+    const ready = await this.prepare(station, 'callin', said, new AbortController(), under, undefined, undefined, request, undefined, notion, onLookup, memory, action, turn?.answer);
     settled = true;
     // anything else worth remembering: learned while the answer airs (never in the way of it)
     if (prompt?.trim() && !memory) void learnFromWords(said, 'call', { stationId: station.id });
@@ -395,10 +400,11 @@ class Radio {
     entry.promise = (async () => {
       // a song an AI app asked for (request_song over MCP) is queued next and announced in this break
       const request = await this.inboxRequest().catch(() => undefined);
-      // an AI app asked to add something to Notion: added now, confirmed in this break
-      const notion = await nextInboxNotionWrite(station).catch(() => undefined);
-      // an AI app asked the hosts to do something: Your list now, anything else asked in this break (yes = the listener)
-      const action = notion ? undefined : await nextInboxAction(station).catch(() => undefined);
+      // an AI app asked the hosts to do something (the agent, or the plain reader without AI): Your list or Notion now,
+      // anything in another account asked in this break (only the listener's yes runs it)
+      const inbox = await nextInboxTurn(station).catch(() => undefined);
+      const notion = inbox?.notion;
+      const action = inbox?.action;
       // songs that cannot play here (checked ahead by the player) leave the queue before the host names one
       await player.aheadReady(4000);
       const q = player.state;
@@ -589,7 +595,20 @@ class Radio {
     if (this.anyAppMode || this.live || player.state.live || !isSongRequest(said)) return undefined;
     const query = requestQuery(said);
     if (isMood(query)) return undefined;
-    const request = await queueRequest(query, this.current?.id);
+    return this.queued(await queueRequest(query, this.current?.id));
+  }
+
+  /** The hosts' play_song tool (core/agent/kit): a song plays next with the app's own player, never over another app. */
+  musicHooks(): MusicHooks {
+    return {
+      canQueue: () =>
+        this.anyAppMode ? 'Another music app is playing, so songs cannot be queued from here' : this.live || player.state.live ? 'A live radio stream is playing, so songs cannot be queued' : true,
+      queue: async (query, trackId) => (this.anyAppMode || this.live || player.state.live ? undefined : this.queued(await queueTrack(trackId, query, this.current?.id))),
+    };
+  }
+
+  /** After a request is queued: noted, and a break already written for the old next song is written again. */
+  private queued(request: SongRequest): SongRequest {
     if (request.found) void noteRequested(request.found);
     const cur = this.current;
     if (request.found && cur && this.pending?.trackId === cur.id) {
@@ -622,13 +641,14 @@ class Radio {
     onLookup?: () => void,
     memory?: MemoryChange,
     action?: ActionTurn,
+    answer?: FollowUp,
   ): Promise<PreparedBreak | undefined> {
     const session = this.session;
     const showPrep = kind === 'callin';
     if (showPrep) this.set({ phase: 'preparing' });
     const timer = setTimeout(() => controller.abort(new Error('The break took too long to write')), PREP_TIMEOUT_MS);
     try {
-      const b = await prepareBreak({ station, kind, callIn, songBefore, songAfter, upcoming, request, notion, deadline, signal: controller.signal, onAir: this.onAirBreak, onLookup, memory, action });
+      const b = await prepareBreak({ station, kind, callIn, songBefore, songAfter, upcoming, request, notion, deadline, signal: controller.signal, onAir: this.onAirBreak, onLookup, memory, action, answer });
       if (session === this.session && kind !== 'callin') this.notePrep(b.tookMs);
       return session === this.session && !controller.signal.aborted ? b : undefined;
     } catch (err) {

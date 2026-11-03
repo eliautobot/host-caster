@@ -14,8 +14,11 @@ export const BACKUP_FORMAT = 'hostcaster-backup';
 const VERSION = 1;
 const TABLES = ['hosts', 'stations', 'brains', 'voices', 'playlists', 'tracks', 'breaks', 'profile', 'settings', 'kv', 'memories', 'journal', 'tracker'] as const;
 type TableName = (typeof TABLES)[number];
-/** kv rows that belong to this device's session, never to a backup */
-const PRIVATE_KV = /^(api:session|sync:|auth:)/;
+/**
+ * kv rows that belong to this device's session, never to a backup: the session, sync state and which account the data
+ * belongs to (restored data is asked about on the next sign-in like any data that never joined the account)
+ */
+const PRIVATE_KV = /^(api:session|sync:|auth:|account:)/;
 /** kv rows that are credentials (music service sign-ins): only in a backup made with keys */
 const CREDENTIAL_KV = /^(spotify:(tokens|pending)|subsonic:auth)$/;
 
@@ -141,7 +144,7 @@ export async function importBackup(file: Blob): Promise<BackupFile> {
   // a full read first: a broken file must fail before anything on this device is replaced
   await readBackup(file, async () => undefined);
   const serverUrl = (await db.settings.get('app'))?.serverUrl;
-  const keepKv = (await db.kv.toArray()).filter((r) => PRIVATE_KV.test(r.id) && !r.id.startsWith('sync:'));
+  const keepKv = (await db.kv.toArray()).filter((r) => PRIVATE_KV.test(r.id) && !/^(sync|account):/.test(r.id));
   const all = [...TABLES.map((t) => db[t] as Table), db.blobs];
   await db.transaction('rw', all, async () => {
     for (const t of all) await t.clear();

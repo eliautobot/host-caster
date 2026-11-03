@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage, Brain } from '../types';
 import type { ToolName } from './tools';
 
-const steps: ((req: { messages: AgentMessage[]; tools?: unknown[] }) => unknown)[] = [];
+const steps: ((req: { messages: AgentMessage[]; tools?: unknown[] }, opts?: { signal?: AbortSignal }) => unknown)[] = [];
 const generated: ((req: { system: string; messages: { content: string }[] }) => string)[] = [];
 const ran: { name: string; args: Record<string, unknown> }[] = [];
 
@@ -12,10 +12,10 @@ vi.mock('./step', async (orig) => {
   const real = await orig<typeof import('./step')>();
   return {
     ...real,
-    modelStep: vi.fn(async (_brain: Brain, req: { messages: AgentMessage[]; tools?: unknown[] }) => {
+    modelStep: vi.fn(async (_brain: Brain, req: { messages: AgentMessage[]; tools?: unknown[] }, opts?: { signal?: AbortSignal }) => {
       const next = steps.shift();
       if (!next) throw new Error('no more steps');
-      return next(req);
+      return next(req, opts);
     }),
   };
 });
@@ -120,13 +120,36 @@ describe('agent loop', () => {
     expect(r.text).toBe('Dana asked you to bring the vendor numbers.');
   });
 
+  it('a model step that hangs at the provider is asked once more (a remote brain); a local model is never cut short', async () => {
+    const remote = { ...brain, id: 'b-remote', preset: undefined, baseUrl: 'https://api.example.com/v1', model: 'm' } as Brain;
+    const hang = (_req: unknown, opts?: { signal?: AbortSignal }) =>
+      new Promise((_, rej) => opts?.signal?.addEventListener('abort', () => rej(new Error('The provider took too long to answer'))));
+    steps.push(hang, () => ({ text: 'Here you go.', toolCalls: [] }));
+    const t0 = Date.now();
+    const r = await runAgent({ ...task(), brain: remote, tools: ['calendar_event'], stepMs: 150, deadline: Date.now() + 8000, answer: 'text' });
+    expect(r.text).toBe('Here you go.');
+    expect(Date.now() - t0).toBeLessThan(2000);
+    // a local model (a cold load takes its time): the same wait is not cut short
+    steps.length = 0;
+    let waited = 0;
+    steps.push(async () => {
+      const s0 = Date.now();
+      await new Promise((ok) => setTimeout(ok, 400));
+      waited = Date.now() - s0;
+      return { text: 'Slow but fine.', toolCalls: [] };
+    });
+    const local = await runAgent({ ...task(), brain: { ...brain, id: 'b-local2' }, tools: ['calendar_event'], stepMs: 150, deadline: Date.now() + 8000, answer: 'text' });
+    expect(local.text).toBe('Slow but fine.');
+    expect(waited).toBeGreaterThanOrEqual(390);
+  });
+
   it('caps: lookups per task, the last step answers without tools, unknown tools refused', async () => {
     const b3 = { ...brain, id: 'b3' };
     steps.push(
       () => ({ text: '', toolCalls: [{ id: 'a', name: 'email_search', args: { query: '1' } }, { id: 'b', name: 'web_search', args: { query: 'x' } }] }),
       (req) => {
         const results = req.messages.filter((m) => m.role === 'tool').map((m) => m.content);
-        expect(results[1]).toMatch(/web_search is not available/);
+        expect(results[1]).toMatch(/web_search is not one of your tools/);
         return { text: '', toolCalls: [{ id: 'c', name: 'email_search', args: { query: '2' } }] };
       },
       (req) => {

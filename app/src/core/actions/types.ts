@@ -3,7 +3,17 @@
 // Level 2 = asks first, only their accounts. Level 3 = asks first and reads back exactly, other people will see it.
 // Anything else (payments, purchases, mail, sharing, inviting people, other people's events) does not exist here.
 
-export type ServerActionType = 'calendar.add' | 'task.add' | 'task.complete' | 'task.edit' | 'invite.respond'
+export type ServerActionType =
+  | 'calendar.add'
+  | 'calendar.update'
+  | 'calendar.delete'
+  | 'task.add'
+  | 'task.complete'
+  | 'task.edit'
+  | 'task.delete'
+  | 'task.move'
+  | 'invite.respond'
+  | 'notion.add'
 export type LocalActionType = 'list.add' | 'reminder.add'
 export type ActionType = ServerActionType | LocalActionType
 
@@ -11,13 +21,19 @@ export const LEVEL: Record<ActionType, 1 | 2 | 3> = {
   'list.add': 1,
   'reminder.add': 1,
   'calendar.add': 2,
+  // 3 when the event has guests (the server decides from Google's answer)
+  'calendar.update': 2,
+  'calendar.delete': 2,
   'task.add': 2,
   'task.complete': 2,
   'task.edit': 2,
+  'task.delete': 2,
+  'task.move': 2,
   'invite.respond': 3,
+  'notion.add': 2,
 }
 
-export const SERVER_TYPES: readonly ServerActionType[] = ['calendar.add', 'task.add', 'task.complete', 'task.edit', 'invite.respond']
+export const SERVER_TYPES: readonly ServerActionType[] = ['calendar.add', 'calendar.update', 'calendar.delete', 'task.add', 'task.complete', 'task.edit', 'task.delete', 'task.move', 'invite.respond', 'notion.add']
 
 export interface CalendarAddPayload {
   title: string
@@ -64,7 +80,9 @@ export type PayloadOf<T extends ServerActionType> = T extends 'calendar.add'
         ? TaskEditPayload
         : InviteRespondPayload
 
-export type ActionOrigin = 'call-in' | 'ai-app' | 'app'
+export type ActionOrigin = 'call-in' | 'call' | 'chat' | 'ai-app' | 'app'
+/** who confirmed: the listener's yes (call-in, call, chat), a tap, or their "allowed without asking" (auto, level 2) */
+export type ConfirmVia = 'call-in' | 'call' | 'chat' | 'tap' | 'auto'
 export type ActionStatus = 'proposed' | 'confirmed' | 'executing' | 'done' | 'failed' | 'cancelled' | 'expired' | 'undone' | 'undo_failed'
 
 /** What the server keeps and returns (see .work/ag4-spec.md). */
@@ -83,9 +101,9 @@ export interface ActionRecord {
   createdAt: number
   expiresAt: number
   confirmedAt?: number
-  confirmedVia?: 'call-in' | 'tap' | 'ai-app'
+  confirmedVia?: ConfirmVia
   executedAt?: number
-  result?: { link?: string; eventId?: string; taskId?: string; listId?: string }
+  result?: { link?: string; eventId?: string; taskId?: string; listId?: string; pageTitle?: string }
   error?: { code: string; message: string }
   undoable: boolean
   undoneAt?: number

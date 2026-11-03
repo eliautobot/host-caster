@@ -1,0 +1,48 @@
+/* Connections > What your hosts can do (HostsCanDo.tsx). Tokens only. */
+.aw-cando {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+.aw-cando__intro,
+.aw-cando__reads,
+.aw-cando__never,
+.aw-cando__warn {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  margin: 0;
+}
+.aw-cando__warn {
+  color: var(--text);
+}
+.aw-cando__group {
+  display: grid;
+  gap: var(--space-1);
+}
+.aw-cando__head {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+  margin: 0;
+}
+.aw-cando__row {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+.aw-cando__title {
+  white-space: normal;
+}
+.aw-cando__sub {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.aw-cando__select {
+  flex: 0 0 190px;
+  max-width: 100%;
+}
+/* phones: the choice goes under the words, full width */
+@media (max-width: 560px) {
+  .aw-cando__select {
+    flex-basis: 100%;
+  }
+}

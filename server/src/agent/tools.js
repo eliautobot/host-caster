@@ -69,8 +69,12 @@ function hasGoogle(app, userId, scope) {
 export function serverTools(app, userId) {
   const search = app.config.agent.search;
   const web = search.provider === 'hostcaster' ? Boolean(app.included?.webSearchOpen?.(userId)) : Boolean(search.provider);
-  const notion = Boolean(getLink(app, userId)?.settings?.read?.length);
+  const link = getLink(app, userId);
+  const notion = Boolean(link?.settings?.read?.length);
   return {
+    // Notion linked, and "Hosts may add notes when I ask" on (the hosts' notion_add tool)
+    notionLinked: Boolean(link),
+    notionWrite: Boolean(link) && link.settings?.writesOn !== false,
     calendar: hasGoogle(app, userId, 'calendar'),
     gmail: hasGoogle(app, userId, 'gmail'),
     imap: imapConfigured(app, userId),

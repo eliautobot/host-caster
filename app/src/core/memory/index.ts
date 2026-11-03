@@ -44,10 +44,12 @@ export function memoryOnPlay(station: Pick<Station, 'id' | 'name'>): void {
 }
 
 /**
- * Notes from the listener's AI app (their own words, like a call-in): journaled once, "remember that ..." honored,
- * the rest learned from in the background.
+ * Notes from the listener's AI app (their own words, like a call-in): journaled once. With an AI brain the hosts'
+ * agent reads each note (actions/inbox.ts: it may remember, add or propose, never approve) and learns from the rest,
+ * so nothing here would remember it a second time. Without one, "remember that ..." is honored here and the rest
+ * learned from in the background.
  */
-export async function memoryFromInbox(inbox: InboxItem[] | undefined, stationId?: string): Promise<void> {
+export async function memoryFromInbox(inbox: InboxItem[] | undefined, stationId?: string, opts: { agent?: boolean } = {}): Promise<void> {
   const notes = (inbox ?? []).filter((i) => i.kind === 'note' && i.text.trim());
   if (!notes.length) return;
   const seen = new Set((await kvGet<string[]>('memory:inbox'))?.value ?? []);
@@ -56,6 +58,7 @@ export async function memoryFromInbox(inbox: InboxItem[] | undefined, stationId?
   await kvSet('memory:inbox', [...seen, ...fresh.map((n) => n.id)].slice(-200));
   for (const n of fresh) {
     await noteSaid(n.text, 'app');
+    if (opts.agent) continue;
     const cmd = await takeMemoryCommand(n.text, 'app').catch(() => undefined);
     if (!cmd) await learnFromWords(n.text, 'app', { stationId });
   }

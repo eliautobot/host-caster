@@ -1,16 +1,18 @@
 // The hosts' side of a live call or chat: every turn sees the conversation so far and everything the hosts already
 // have (the day's calendar, mail, news and weather, the research desk's notes, what they remember, Your list) and
-// runs the same engines as a call-in: "remember that ..." (memory/commands), song requests (radio/requests: queued
-// for after the call), Notion asks, Your list and the actions engine (a proposal read back by code, the listener's
-// yes runs it), then the agent loop with live lookups for the answer. Learning from the listener's words runs after.
-// Without an AI brain the hosts say so honestly and still take song requests and notes.
+// is one agent turn (agent/kit, docs/AGENT.md): the tools are rebuilt from what is connected and allowed, the model
+// decides from the whole conversation what to look up and do (Your list, memory, songs, Google, Notion), anything in
+// another account is proposed and read back by code, and the listener's yes runs it. Learning runs after.
+// Without an AI brain the hosts say so honestly and a plain command reader still takes song requests and notes.
 import { isAcknowledgement } from '../agent/changes';
 import { snoozeLast } from '../agent/headsup';
 import { answerFollowUp, followItems, type FollowItem } from '../agent/followup';
 import { peopleWords } from '../agent/brief';
+import { effectsTurn } from '../agent/kit/effects';
+import { agentTurn } from '../agent/kit/turn';
+import type { Effect, MusicHooks } from '../agent/kit/types';
 import { runAgent } from '../agent/loop';
-import { lookupsOn, toolContext } from '../agent/research';
-import { availableTools, type ToolName } from '../agent/tools';
+import { toolContext } from '../agent/research';
 import { actionTask, takeActionTurn, type ActionTurn } from '../actions/callin';
 import { linesAroundAction } from '../actions/echo';
 import { actionHistory } from '../actions/engine';
@@ -40,6 +42,8 @@ export interface CallHooks {
   requestSong?: (said: string) => Promise<SongRequest | undefined>;
   /** the song under the call (paused for a voice call, playing for a chat) */
   nowPlaying?: () => TrackSummary | undefined;
+  /** the radio's queue for the play_song tool (songs play next; after a call: right after it) */
+  music?: MusicHooks;
 }
 
 export interface HostsBrain extends CallBrain {
@@ -49,11 +53,14 @@ export interface HostsBrain extends CallBrain {
   listenerName?: string;
 }
 
+/** a word of acknowledgement before code's read-back (voiced ahead at pickup) */
+const ACKS = ['Sure.', 'You got it.', 'Okay.', 'Sure thing.'];
+
 const VOICE_TOKENS = 260;
 const TEXT_TOKENS = 380;
-/** answer within this, lookups included (a phone call cannot wait long) */
-const VOICE_DEADLINE_MS = 16_000;
-const TEXT_DEADLINE_MS = 22_000;
+/** answer within this, tools included (a phone call cannot wait long; a hold line covers a slow tool) */
+const VOICE_DEADLINE_MS = 20_000;
+const TEXT_DEADLINE_MS = 25_000;
 const CONTEXT_WAIT_MS = 1500;
 const CONTEXT_TTL_MS = 5 * 60_000;
 
@@ -62,13 +69,20 @@ const pickOne = <T>(bank: readonly T[]): T => bank[Math.floor(Math.random() * ba
 /** The facts the hosts have at hand, compact (a call turn should be quick to read). */
 export function callFacts(packet: ContextPacket, items: FollowItem[], now = Date.now()): string[] {
   const out: string[] = [];
-  const soon = (packet.calendar ?? []).filter((e) => (e.end ?? e.start) > now && e.start < now + 36 * 3600_000).slice(0, 8);
+  // what the hosts hold (the next 36 hours), up to the end of tomorrow: "what's on tomorrow?" is answered from here
+  // when it covers all of tomorrow, and says honestly up to when it goes (calendar_day has any day)
+  const midnight = new Date(now);
+  midnight.setHours(24 * 2, 0, 0, 0);
+  const until = Math.min(midnight.getTime(), now + 36 * 3600_000);
+  const all = (packet.calendar ?? []).filter((e) => (e.end ?? e.start) > now && e.start < until);
+  const soon = all.slice(0, 10);
+  const span = until === midnight.getTime() ? 'TODAY AND TOMORROW' : `UNTIL ${new Date(until).toLocaleString('en-US', { weekday: 'long', hour: 'numeric' }).toUpperCase()}`;
   if (soon.length) {
     const row = (e: (typeof soon)[number]) => {
       const who = peopleWords(e, 5);
       return `- ${speakable(e.title, 80)}: ${eventSpoken(e, now)}${e.location ? `, at ${speakable(e.location, 60)}` : ''}${who ? `; people: ${speakable(who, 160)}` : ''}`;
     };
-    out.push(`CALENDAR (next 36 hours, complete):\n${soon.map(row).join('\n')}`);
+    out.push(`CALENDAR, ${span} (${all.length > soon.length ? `the first ${soon.length}; calendar_day has the rest` : 'complete'}):\n${soon.map(row).join('\n')}`);
   }
   const mail = (packet.email ?? []).filter((m) => m.important).slice(0, 5);
   if (mail.length) out.push(`IMPORTANT MAIL:\n${mail.map((m) => `- from ${senderName(m.from)}: ${speakable(m.subject, 90)}`).join('\n')}`);
@@ -181,6 +195,9 @@ export async function hostsBrain(station: Station, mode: CallMode, hooks: CallHo
   const coHost = hosts[1];
   let turns = 0;
   const since = Date.now() - (mode === 'text' ? 2 * 3600_000 : 60_000);
+  // the tools this conversation used or loaded: they stay loaded for its next turns (kit/discover.ts)
+  const keep: string[] = [];
+  const last: { offered?: string[] } = {};
 
   // what the hosts have at hand: loaded once (a call starts while the phone rings), refreshed every few minutes
   let packetAt = 0;
@@ -207,6 +224,8 @@ export async function hostsBrain(station: Station, mode: CallMode, hooks: CallHo
       void noteGotIt(said);
     }
     void noteSaid(said, 'call');
+    // with an AI brain the agent decides what to do with its tools; the patterns below are the scripted fallback's
+    if (answerBrain) return d;
     const memory = await takeMemoryCommand(said, 'call').catch(() => undefined);
     if (memory) {
       d.memory = memory;
@@ -238,7 +257,7 @@ export async function hostsBrain(station: Station, mode: CallMode, hooks: CallHo
       d.scripted.push(notionSpoken(notion, (bank, vars) => pickOne(bank).replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? vars[k.toLowerCase()] ?? '')));
       return d;
     }
-    const action = await takeActionTurn({ said, origin: 'call-in', brain, signal }).catch(() => undefined);
+    const action = await takeActionTurn({ said, origin: 'call-in', signal }).catch(() => undefined);
     if (action) {
       d.action = action;
       d.exact = action.line;
@@ -263,7 +282,7 @@ export async function hostsBrain(station: Station, mode: CallMode, hooks: CallHo
     return m?.answer ?? NO_BRAIN_REPLY;
   }
 
-  async function aiReply(said: string, history: CallLine[], d: Done, opts: { signal: AbortSignal; onLookup: () => void }): Promise<string> {
+  async function aiReply(said: string, history: CallLine[], d: Done, opts: { signal: AbortSignal; onLookup: () => void }): Promise<{ text: string; effects: Effect[] }> {
     const settings = await getSettings();
     const ctx = await context();
     const now = Date.now();
@@ -293,24 +312,34 @@ export async function hostsBrain(station: Station, mode: CallMode, hooks: CallHo
       .filter(Boolean)
       .join('\n\n');
     const system = callSystem(mode, station, lead, listener, coHost);
-    // an action's own line is the answer's end: no lookups needed for the reaction before it
-    const lookups = !d.exact && !d.memory && lookupsOn(settings, answerBrain);
-    const tools: ToolName[] = lookups ? await availableTools({ connections: settings.connections, headlines: ctx?.packet.news ?? [] }) : [];
-    const res = await runAgent({
+    const toolCtx = await toolContext(settings, { news: ctx?.packet.news ?? [] }, lead, 'call-in');
+    const deadline = now + (mode === 'voice' ? VOICE_DEADLINE_MS : TEXT_DEADLINE_MS);
+    const maxTokens = mode === 'voice' ? VOICE_TOKENS : TEXT_TOKENS;
+    // an AI app's brain (connector) answers in words only; every other brain gets the hosts' tools
+    if (answerBrain!.kind === 'connector') {
+      const res = await runAgent({ brain: answerBrain!, system, user, tools: [], ctx: toolCtx, maxSteps: 1, maxCalls: 0, deadline, signal: opts.signal, answer: 'text', maxTokens });
+      return { text: res.text, effects: [] };
+    }
+    const heard = [...history.filter((l) => l.who === 'you').slice(-8).map((l) => l.text), said].join('\n');
+    const res = await agentTurn({
+      turn: mode === 'voice' ? 'call' : 'chat',
       brain: answerBrain!,
       system,
       user,
-      tools,
-      ctx: await toolContext(settings, { news: ctx?.packet.news ?? [] }, lead, 'call-in'),
-      maxSteps: tools.length ? 3 : 1,
-      maxCalls: 3,
-      deadline: now + (mode === 'voice' ? VOICE_DEADLINE_MS : TEXT_DEADLINE_MS),
+      said,
+      heard,
+      ctx: toolCtx,
+      music: hooks.music,
+      maxSteps: 4,
+      maxCalls: 5,
+      deadline,
+      maxTokens,
       signal: opts.signal,
-      answer: 'text',
-      maxTokens: mode === 'voice' ? VOICE_TOKENS : TEXT_TOKENS,
       onLookup: () => opts.onLookup(),
+      keep,
+      last,
     });
-    return res.text;
+    return { text: res.text, effects: res.effects };
   }
 
   return {
@@ -319,6 +348,7 @@ export async function hostsBrain(station: Station, mode: CallMode, hooks: CallHo
     listenerName,
     lead: { id: lead.id, name: lead.name },
     greeting: () => [line(answerBrain ? pickupLine(listenerName, station.name) : noBrainLine(listenerName))],
+    acks: () => (answerBrain ? ACKS.map((a) => line(a)) : []),
     holdLine: () => line(pickOne(HOLD_LINES)),
     stillThere: () => line(stillThereLine(listenerName)),
     wrapUp: () => line(wrapUpLine(listenerName)),
@@ -330,15 +360,20 @@ export async function hostsBrain(station: Station, mode: CallMode, hooks: CallHo
       const d = await act(said, opts.signal);
       let lines: HostLine[];
       let notice: string | undefined;
+      let effects: Effect[] = [];
       if (!answerBrain) {
         lines = [line(await scriptedReply(said, d))];
       } else if (d.action?.kind === 'asked') {
         // a read-back that waits for a yes: a word of acknowledgement, then code's exact question (no model step)
-        lines = [line(pickOne(['Sure.', 'You got it.', 'Okay.', 'Sure thing.']))];
+        lines = [line(pickOne(ACKS))];
       } else {
         try {
-          lines = replyLines(await aiReply(said, history, d, opts), lead, hosts);
-          if (!lines.length) throw new Error('The brain gave an empty answer');
+          const r = await aiReply(said, history, d, opts);
+          effects = r.effects;
+          lines = replyLines(r.text, lead, hosts);
+          if (!lines.length && !effects.length) throw new Error('The brain gave an empty answer');
+          // the tools ended the turn with code's read-back: a word of acknowledgement before it
+          if (!lines.length && effects.some((e) => e.kind === 'asked')) lines = [line(pickOne(ACKS))];
         } catch (err) {
           if (opts.signal.aborted) throw err;
           notice = `Your hosts' AI did not answer (${err instanceof Error ? err.message : String(err)}).`;
@@ -346,15 +381,18 @@ export async function hostsBrain(station: Station, mode: CallMode, hooks: CallHo
           lines = s ? [line(s)] : [];
         }
       }
+      // what the tools did: code's exact words (done lines, then the read-back that waits for a yes)
+      const action = d.action ?? (await effectsTurn(effects).catch(() => undefined));
       // the action's exact words come last, said once (the model's lines never repeat or claim them)
-      if (d.action && d.exact) lines = [...linesAroundAction(lines, d.action), line(d.exact)];
+      if (action?.line) lines = [...linesAroundAction(lines, action), line(action.line)];
       lines = lines.filter((l) => l.text.trim());
+      const mem = d.memory ?? effects.find((e): e is Extract<Effect, { kind: 'memory' }> => e.kind === 'memory')?.change;
       // anything else worth remembering: learned while the answer is spoken (never in its way)
-      if (!d.memory) void learnFromWords(said, 'call', { stationId: station.id }).catch(() => undefined);
-      const remembered = d.memory && (d.memory.op === 'remembered' || d.memory.op === 'updated') ? d.memory.text : undefined;
+      if (!mem) void learnFromWords(said, 'call', { stationId: station.id }).catch(() => undefined);
+      const remembered = mem && (mem.op === 'remembered' || mem.op === 'updated') ? mem.text : undefined;
       return {
         lines,
-        ...(d.action?.kind === 'asked' && d.action.action ? { actionId: d.action.action.id } : {}),
+        ...(action?.kind === 'asked' && action.action ? { actionId: action.action.id } : {}),
         ...(notice ? { notice } : {}),
         ...(remembered ? { remembered } : {}),
       };

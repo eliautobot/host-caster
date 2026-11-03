@@ -9,6 +9,7 @@ import { PlayerBar } from '../player/PlayerBar';
 import { resolveScreen, screens, type ScreenMatch } from '../screens';
 import { UpdateNotice } from '../update/UpdateNotice';
 import { CallLayer } from '../call/CallLayer';
+import { JoinQuestion } from '../account/JoinQuestion';
 import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import './layout.css';
@@ -63,6 +64,7 @@ export function AppShell() {
           <Bare params={match.params} query={route.query} />
         </Suspense>
         <UpdateNotice />
+        <JoinQuestion />
         <Toaster />
       </>
     );
@@ -104,6 +106,7 @@ export function AppShell() {
       )}
       <CallLayer />
       <UpdateNotice />
+      <JoinQuestion />
       <Toaster />
     </div>
   );

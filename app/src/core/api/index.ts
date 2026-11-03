@@ -1,6 +1,7 @@
 export { api, request, ApiError, isOffline, type RequestOptions } from './client';
 export { auth, handleDeepLink, listenForDeepLinks, signInErrorText, usesBearer, type GoogleService } from './auth';
-export { sync, readLocalDoc, type SyncState, type SyncStatus } from './sync';
+export { sync, readLocalDoc, type JoinChoice, type SyncNotice, type SyncState, type SyncStatus } from './sync';
+export type { JoinAdds } from './merge';
 export {
   aiProxy,
   ttsProxy,

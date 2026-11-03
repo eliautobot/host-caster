@@ -5,8 +5,11 @@ import { api, auth, isOnline, listenForDeepLinks, online, signInErrorText, sync,
 import { listenForNotionLinks, notion } from '@/core/api/notion';
 import { getSettings } from '@/core/db';
 import { onDeepLink, sellsPlans } from '@/core/native';
+import { player } from '@/core/player';
+import { radio } from '@/core/radio';
 import type { ApiSession, ServerConfig } from '@/core/types';
 import { toast } from '@/ui/components/Toast';
+import { announceSignOut } from '@/ui/account/flash';
 import { applyIncluded } from '@/ui/online/setupIncluded';
 import { navigate, useRoute } from './router';
 import { startPlanStore, usePlan } from './plan';
@@ -163,7 +166,9 @@ export function startSessionStore(): () => void {
       const was = useSession.getState().session;
       useSession.setState({ session });
       if (session) void sync.start();
-      else void sync.stop();
+      // a session that ended by itself keeps what was synced (the data here is still that account's); signing out
+      // removed it already (auth.signOut)
+      else void sync.stop(true);
       // a sign-in, a confirmed email or a sign-out while the app is open
       if (isOnline() && useSession.getState().ready && (was?.user.id !== session?.user.id || was?.user.emailVerified !== session?.user.emailVerified)) {
         void routeOnline(session);
@@ -187,6 +192,16 @@ export function startSessionStore(): () => void {
       navigate(`/settings/connections?notion=${e.connected ? 'connected' : encodeURIComponent(e.code ?? 'error')}`);
     }),
     sync.on('state', (s) => useSession.setState({ sync: s })),
+    sync.on('notice', (notice) => {
+      // the other account's station and queue leave with its data
+      if (notice === 'other-account') {
+        radio.stop();
+        player.stop();
+        void player.load([]);
+      }
+      if (notice === 'other-account') toast({ title: 'Started fresh for this account', description: 'This device had another account\'s hosts and stations. They were removed here and stay in that account.' });
+      else toast({ title: 'Your account stayed as it was', description: 'This device\'s copies would have replaced most of it, so your account\'s versions stayed. Anything new from this device was added.' });
+    }),
     api.on('probe', (config) => useSession.setState({ config, available: api.available })),
     // the server forgot this session (expired, signed out elsewhere, account deleted)
     api.on('unauthorized', () => {
@@ -199,6 +214,7 @@ export function startSessionStore(): () => void {
     if (!api.config) await api.probe();
     const session = await auth.restore();
     useSession.setState({ ready: true, session, config: api.config, available: api.available });
+    announceSignOut();
     const returnedFromSignIn = Boolean(session && useRoute.getState().query.signedIn);
     handleAuthReturn(session);
     // restore() started sync; let the first pull land before deciding about onboarding (the account may have done

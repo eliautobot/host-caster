@@ -517,7 +517,7 @@ test('actions: history newest first, by status; NEVER types refused; nothing rea
   assert.equal((await call('GET', '/api/actions?limit=1')).json().actions.length, 1);
   assert.equal((await call('GET', '/api/actions?status=bogus')).json().actions.length, 3, 'an unknown status filter is ignored');
 
-  for (const type of ['mail.forward', 'mail.delete', 'mail.send', 'email.draft', 'payment.send', 'purchase', 'calendar.invite', 'calendar.edit', 'calendar.delete', 'event.update', 'share', 'contacts.share', 'list.add', 'reminder.add', 'notion.write', '', 'Calendar.Add', 'calendar.add ', '__proto__', 'constructor', 'toString', 123, null, ['calendar.add'], { type: 'calendar.add' }]) {
+  for (const type of ['mail.forward', 'mail.delete', 'mail.send', 'email.draft', 'payment.send', 'purchase', 'calendar.invite', 'calendar.edit', 'calendar.share', 'event.update', 'share', 'contacts.share', 'list.add', 'reminder.add', 'notion.write', '', 'Calendar.Add', 'calendar.add ', '__proto__', 'constructor', 'toString', 123, null, ['calendar.add'], { type: 'calendar.add' }]) {
     const r = await propose(type, { title: 'x', to: 'boss@x.test' });
     assert.equal(r.statusCode, 400, `${JSON.stringify(type)}: ${r.body}`);
     assert.equal(r.json().error.code, 'action_not_allowed', JSON.stringify(type));

@@ -36,6 +36,8 @@ export interface TurnReply {
 export interface CallBrain {
   lead: { id: string; name: string };
   greeting(): HostLine[];
+  /** the short words said before code's read-back ("Okay."): voiced ahead so they play at once */
+  acks?(): HostLine[];
   reply(said: string, history: CallLine[], opts: { signal: AbortSignal; onLookup: () => void }): Promise<TurnReply>;
   holdLine(): HostLine;
   stillThere(): HostLine;
@@ -220,6 +222,9 @@ export class CallSession {
     mouth.prime?.(greeting);
     await Promise.all([music.hold().catch(() => undefined), this.deps.ring(this.life.signal).catch(() => undefined)]);
     if (!this.live) return this.ended;
+    // the acknowledgements before a read-back, voiced while the host says hello (a read-back starts at once)
+    const acks = brain.acks?.() ?? [];
+    if (acks.length) setTimeout(() => this.live && mouth.prime?.(acks), 0);
     this.set({ startedAt: this.now() });
     this.limitTimers.push(
       setTimeout(() => {

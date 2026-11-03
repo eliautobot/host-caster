@@ -1,8 +1,9 @@
 // Which Host-Caster server this device talks to (settings.serverUrl). '' on web = the server that served the app.
-import { api, auth, sync } from '@/core/api';
+import { api } from '@/core/api';
 import { saveSettings } from '@/core/db';
 import { desktop, isNative } from '@/core/native';
 import type { ServerConfig } from '@/core/types';
+import { signOutHere } from '../../../account/signOut';
 
 /**
  * The server the phone apps use until someone picks another one: the hosted service, or VITE_HOSTCASTER_SERVER at
@@ -54,10 +55,8 @@ export async function setServerUrl(input: string): Promise<ServerConfig | undefi
   // an empty address goes back to the default (the phone apps' hosted server)
   const url = normalizeServerUrl(input) || defaultServerUrl();
   if (url === api.baseUrl) return api.probe();
-  if (api.session) {
-    await sync.stop();
-    await auth.signOut();
-  }
+  // signing out of the old server removes its account's data from this device (it never goes to the new one)
+  if (api.session) await signOutHere();
   api.configure({ baseUrl: url });
   await saveSettings({ serverUrl: url || undefined });
   return api.probe();

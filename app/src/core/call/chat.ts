@@ -108,7 +108,7 @@ class HostChat {
     const p = (async () => {
       const station = await getStation(id);
       if (!station) throw new Error('Pick a station first, then message its hosts.');
-      return hostsBrain(station, 'text', { requestSong: (said) => radio.requestSong(said), nowPlaying: () => summarize(radio.nowPlaying) });
+      return hostsBrain(station, 'text', { requestSong: (said) => radio.requestSong(said), nowPlaying: () => summarize(radio.nowPlaying), music: radio.musicHooks() });
     })();
     this.brain = { station: id, at: Date.now(), p };
     p.catch(() => {

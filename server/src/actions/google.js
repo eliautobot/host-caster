@@ -46,12 +46,16 @@ async function withRetries(app, fn, counter) {
 const SERVICE = { calendarEvents: 'Google Calendar', tasks: 'Google Tasks' };
 const NOT_DONE = {
   'calendar.add': 'nothing was added',
+  'calendar.update': 'the event was not changed',
+  'calendar.delete': 'the event is still in your calendar',
   'task.add': 'nothing was added',
   'task.complete': 'the task is still open',
   'task.edit': 'the task was not changed',
+  'task.delete': 'the task is still in your Google Tasks',
+  'task.move': 'the task stayed where it was',
   'invite.respond': 'your answer was not sent',
 };
-const CHECK = { 'calendar.add': 'your calendar', 'task.add': 'your Google Tasks', 'task.complete': 'your Google Tasks', 'task.edit': 'your Google Tasks', 'invite.respond': 'your calendar' };
+const CHECK = Object.fromEntries(Object.keys(NOT_DONE).map((t) => [t, t.startsWith('task.') ? 'your Google Tasks' : 'your calendar']));
 
 /** Any error from a try -> the plain failure the listener sees. */
 function failureOf(type, err) {
@@ -64,7 +68,7 @@ function failureOf(type, err) {
   if (err?.code === 'google_not_connected' || err?.code === 'google_disabled') return new ActionFailure('google_not_connected', `Google is not connected anymore, so ${notDone}.`);
   if (err?.code === 'not_found' || err?.code === 'gone') {
     const what = type.startsWith('task.') ? 'That task is no longer in your Google Tasks' : 'That event is no longer in your calendar';
-    return new ActionFailure('not_found', `${what}, so ${notDone}.`);
+    return new ActionFailure('not_found', type.endsWith('.delete') ? `${what}, so there was nothing to delete.` : `${what}, so ${notDone}.`);
   }
   return new ActionFailure('google_refused', `${service} said no, so ${notDone}.`);
 }
@@ -90,6 +94,39 @@ export function inviteProblem(ev, now = Date.now()) {
   if (ev.organizer?.self || self?.organizer) return 'That is your own event, so there is nothing to answer';
   if (!self) return 'You are not invited to that event';
   return undefined;
+}
+
+/** Why the listener cannot change or delete this event themselves (undefined when they can). */
+export function ownEventProblem(ev) {
+  if (!ev || ev.status === 'cancelled') return 'That event was already cancelled';
+  const self = (ev.attendees ?? []).find((a) => a.self);
+  const mine = ev.organizer?.self || self?.organizer || (!ev.organizer && !self);
+  if (!mine) return "That is someone else's event, so only your answer to the invitation can change";
+  return undefined;
+}
+
+/** The people Google tells about a change: every guest but the listener and rooms. */
+export const guestsOf = (ev) => (ev.attendees ?? []).filter((a) => !a.self && !a.resource).length;
+
+/** the guests' names as the listener knows them (the name Google shows, else the address), plain letters only, 3 at most */
+export const guestNamesOf = (ev) =>
+  (ev.attendees ?? [])
+    .filter((a) => !a.self && !a.resource)
+    .slice(0, 3)
+    .map((a) => String(a.displayName || a.email || '').replace(/[^\p{L}\p{N} .@'-]/gu, '').trim().slice(0, 60))
+    .filter(Boolean);
+
+function ownEventContext(ev, tz) {
+  const allDay = Boolean(ev.start?.date && !ev.start?.dateTime);
+  return {
+    title: String(ev.summary ?? '').trim().slice(0, 200) || 'the event',
+    allDay,
+    ...(allDay ? { startDate: ev.start.date } : { start: Date.parse(ev.start?.dateTime) }),
+    tz: isTimeZone(tz) ? tz : isTimeZone(ev.start?.timeZone) ? ev.start.timeZone : 'UTC',
+    guests: guestsOf(ev),
+    guestNames: guestNamesOf(ev),
+    ...(ev.recurringEventId ? { recurring: true } : {}),
+  };
 }
 
 function inviteContext(ev, tz) {
@@ -144,6 +181,31 @@ export async function prepare(app, userId, type, payload, { tz } = {}) {
       }
       return { currentTitle: String(task.title ?? '').trim().slice(0, 200) };
     }
+    case 'task.delete':
+    case 'task.move': {
+      const task = await lookup(() => api.get(taskPath(payload.listId, payload.taskId)), 'taskId', 'That task is not in your Google Tasks');
+      if (task.deleted) throw invalid('taskId', 'That task is not in your Google Tasks');
+      if (!sameTitle(task.title, payload.title)) throw invalid('title', 'That task has another title in your Google Tasks');
+      if (type === 'task.delete') return {};
+      const lists = await lookup(() => api.get('/tasks/v1/users/@me/lists'), 'toListId', 'Your Google Tasks lists could not be read');
+      const titleOf = (id) => (lists.items ?? []).find((l) => l.id === id)?.title;
+      const fromTitle = payload.listId === '@default' ? (lists.items ?? [])[0]?.title : titleOf(payload.listId);
+      const toTitle = titleOf(payload.toListId);
+      if (!toTitle) throw invalid('toListId', 'That list is not in your Google Tasks');
+      return { fromTitle: String(fromTitle ?? '').slice(0, 100), toTitle: String(toTitle).slice(0, 100) };
+    }
+    case 'calendar.update':
+    case 'calendar.delete': {
+      const ev = await lookup(
+        () => api.get(`/calendar/v3/calendars/${enc(payload.calendarId)}/events/${enc(payload.eventId)}`),
+        'eventId',
+        'That event is not in your calendar',
+      );
+      const problem = ownEventProblem(ev);
+      if (problem) throw invalid('eventId', problem);
+      if (type === 'calendar.delete' && !sameTitle(ev.summary, payload.title)) throw invalid('title', 'That event has another title in your calendar');
+      return ownEventContext(ev, tz);
+    }
     case 'invite.respond': {
       const ev = await lookup(
         () => api.get(`/calendar/v3/calendars/${enc(payload.calendarId)}/events/${enc(payload.eventId)}`),
@@ -160,6 +222,18 @@ export async function prepare(app, userId, type, payload, { tz } = {}) {
 }
 
 // ---- execute --------------------------------------------------------------------------------------------------------
+
+const eventPath = (calendarId, eventId) => `/calendar/v3/calendars/${enc(calendarId)}/events/${enc(eventId)}`;
+
+/** start/end for Google: days for an all-day event, stamps with the zone otherwise (the other field cleared). */
+function whenBody(p) {
+  return p.allDay
+    ? { start: { date: p.start, dateTime: null, timeZone: null }, end: { date: p.end, dateTime: null, timeZone: null } }
+    : { start: { dateTime: p.start, timeZone: p.timeZone, date: null }, end: { dateTime: p.end, timeZone: p.timeZone, date: null } };
+}
+
+/** gone already (an earlier try landed, or the listener did it): the delete is done either way */
+const alreadyGone = (err) => err?.code === 'not_found' || err?.code === 'gone';
 
 function eventBody(id, p) {
   const when = p.allDay
@@ -328,6 +402,88 @@ const EXECUTE = {
     };
   },
 
+  async 'task.delete'(app, api, action, counter, timeoutMs) {
+    const p = action.payload;
+    const before = await withRetries(app, () => api.call('GET', taskPath(p.listId, p.taskId), { timeoutMs }), counter);
+    if (before.deleted) throw new ActionFailure('not_found', 'That task is no longer in your Google Tasks, so there was nothing to delete.');
+    try {
+      await withRetries(app, () => api.call('DELETE', taskPath(p.listId, p.taskId), { timeoutMs }), counter);
+    } catch (err) {
+      if (!alreadyGone(err) || counter.attempts < 2) throw err;
+    }
+    // Google gives no way back for a deleted task: Undo puts back a copy (title, notes, due date, done or not)
+    const copy = { title: before.title ?? '', ...(before.notes ? { notes: before.notes } : {}), ...(before.due ? { due: before.due } : {}), ...(before.status === 'completed' ? { status: 'completed' } : {}) };
+    return { result: { taskId: p.taskId, listId: listIdOf(before, p.listId) }, undo: { listId: listIdOf(before, p.listId), copy } };
+  },
+
+  async 'task.move'(app, api, action, counter, timeoutMs) {
+    const p = action.payload;
+    const task = await withRetries(
+      app,
+      async (attempt) => {
+        try {
+          return await api.call('POST', `${taskPath(p.listId, p.taskId)}/move`, { params: { destinationTasklist: p.toListId }, timeoutMs });
+        } catch (err) {
+          // an earlier try moved it (its answer was lost): it is in the other list now
+          if (attempt > 1 && alreadyGone(err)) return api.call('GET', taskPath(p.toListId, p.taskId), { timeoutMs });
+          throw err;
+        }
+      },
+      counter,
+    );
+    const taskId = task?.id ?? p.taskId;
+    return {
+      result: { taskId, listId: p.toListId, ...(task?.webViewLink ? { link: task.webViewLink } : {}) },
+      undo: { listId: p.toListId, taskId, back: p.listId },
+    };
+  },
+
+  async 'calendar.update'(app, api, action, counter, timeoutMs) {
+    const p = action.payload;
+    const path = eventPath(p.calendarId, p.eventId);
+    const before = await withRetries(app, () => api.call('GET', path, { timeoutMs }), counter);
+    const problem = ownEventProblem(before);
+    if (problem) throw new ActionFailure('event_changed', `${problem}, so the event was not changed.`);
+    const patch = {};
+    const prev = {};
+    if (p.title !== undefined) {
+      patch.summary = p.title;
+      prev.summary = before.summary ?? '';
+    }
+    if (p.location !== undefined) {
+      patch.location = p.location ?? '';
+      prev.location = before.location ?? '';
+    }
+    if (p.start !== undefined) {
+      Object.assign(patch, whenBody(p));
+      prev.start = before.start;
+      prev.end = before.end;
+    }
+    // guests get the new time from Google (the read-back said so); an event without guests tells no one
+    const sendUpdates = guestsOf(before) > 0 ? 'all' : 'none';
+    const ev = await withRetries(app, () => api.call('PATCH', path, { params: { sendUpdates }, body: patch, timeoutMs }), counter);
+    return {
+      result: { eventId: p.eventId, ...(ev.htmlLink ? { link: ev.htmlLink } : {}) },
+      undo: { calendarId: p.calendarId, eventId: p.eventId, patch: prev, sendUpdates },
+    };
+  },
+
+  async 'calendar.delete'(app, api, action, counter, timeoutMs) {
+    const p = action.payload;
+    const path = eventPath(p.calendarId, p.eventId);
+    const before = await withRetries(app, () => api.call('GET', path, { timeoutMs }), counter);
+    const problem = ownEventProblem(before);
+    if (problem) throw new ActionFailure('event_changed', `${problem}, so nothing was deleted.`);
+    const guests = guestsOf(before);
+    try {
+      await withRetries(app, () => api.call('DELETE', path, { params: { sendUpdates: guests > 0 ? 'all' : 'none' }, timeoutMs }), counter);
+    } catch (err) {
+      if (!alreadyGone(err) || counter.attempts < 2) throw err;
+    }
+    // with guests, Google already told them it is cancelled: there is no honest undo
+    return { result: { eventId: p.eventId }, ...(guests > 0 ? {} : { undo: { calendarId: p.calendarId, eventId: p.eventId } }) };
+  },
+
   async 'invite.respond'(app, api, action, counter, timeoutMs) {
     const p = action.payload;
     const path = `/calendar/v3/calendars/${enc(p.calendarId)}/events/${enc(p.eventId)}`;
@@ -386,6 +542,19 @@ const UNDO = {
   async 'task.edit'(app, api, undo, counter, timeoutMs) {
     await withRetries(app, () => api.call('PATCH', taskPath(undo.listId, undo.taskId), { body: undo.patch, timeoutMs }), counter);
   },
+  async 'task.delete'(app, api, undo, counter, timeoutMs) {
+    await withRetries(app, () => api.call('POST', `/tasks/v1/lists/${enc(undo.listId)}/tasks`, { body: undo.copy, timeoutMs }), counter);
+  },
+  async 'task.move'(app, api, undo, counter, timeoutMs) {
+    await withRetries(app, () => api.call('POST', `${taskPath(undo.listId, undo.taskId)}/move`, { params: { destinationTasklist: undo.back }, timeoutMs }), counter);
+  },
+  async 'calendar.update'(app, api, undo, counter, timeoutMs) {
+    await withRetries(app, () => api.call('PATCH', eventPath(undo.calendarId, undo.eventId), { params: { sendUpdates: undo.sendUpdates ?? 'none' }, body: undo.patch, timeoutMs }), counter);
+  },
+  async 'calendar.delete'(app, api, undo, counter, timeoutMs) {
+    // an event the listener deleted stays in Google's bin for a while: confirmed again, it is back as it was
+    await withRetries(app, () => api.call('PATCH', eventPath(undo.calendarId, undo.eventId), { params: { sendUpdates: 'none' }, body: { status: 'confirmed' }, timeoutMs }), counter);
+  },
   async 'invite.respond'(app, api, undo, counter, timeoutMs) {
     const path = `/calendar/v3/calendars/${enc(undo.calendarId)}/events/${enc(undo.eventId)}`;
     const ev = await withRetries(app, () => api.call('GET', path, { timeoutMs }), counter);
@@ -400,6 +569,10 @@ const UNDO_FAILED = {
   'task.add': 'so the task is still in your Google Tasks',
   'task.complete': 'so the task is still marked done',
   'task.edit': 'so the task keeps its new details',
+  'task.delete': 'so the task is still deleted',
+  'task.move': 'so the task stays in its new list',
+  'calendar.update': 'so the event keeps its new details',
+  'calendar.delete': 'so the event is still deleted',
   'invite.respond': 'so your answer stays as it is',
 };
 

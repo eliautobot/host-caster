@@ -2,7 +2,11 @@
 // pull again on focus and every few minutes; 409 = someone else pushed first -> pull, three-way merge, push again.
 // API keys never travel in the doc: they go to the server's secrets and the doc carries secretRef.
 // Songs, playlist lists and unplayable marks sync as their own records after the doc (./syncItems.ts).
+// Every device knows which account its data belongs to (core/db/account.ts): another account's data is removed before
+// a round, never merged; data that never belonged to an account joins once (the person is asked when it would add
+// their own work to an account that already has data).
 import { liveQuery, type Subscription } from 'dexie';
+import { clearAccountData, dataOwner, setDataOwner } from '../db/account';
 import { db } from '../db/db';
 import { kvDelete, kvGet, kvSet } from '../db/kv';
 import { migrateDocBrains } from '../db/noBrain';
@@ -10,20 +14,33 @@ import { desktop } from '../native/desktop';
 import { PROFILE_ID, SETTINGS_ID, type Brain, type Playlist, type Settings, type SyncDoc, type VoiceProvider } from '../types';
 import { createEmitter } from '../util/emitter';
 import { api, ApiError, isOffline, request } from './client';
-import { COLLECTIONS, docHash, localTombstones, mergeDocs, stampsOf, type SyncBase } from './merge';
+import { isSyncedTrack } from './itemMerge';
+import { COLLECTIONS, docHash, isDestructiveJoin, localTombstones, mergeDocs, planJoin, stampsOf, type JoinAdds, type JoinMode, type SyncBase } from './merge';
 import { resetItemState, syncItemsRound, watchItemChanges } from './syncItems';
 
 const BASE_KEY = 'sync:base';
 const KEYS_KEY = 'sync:secret-hashes';
+/** the person's answer to "Add the stations and hosts on this device to your account?" until the join is done */
+const JOIN_KEY = 'sync:join';
+const SESSION_KEY = 'api:session';
 const PUSH_DELAY = 2000;
 const PULL_EVERY = 5 * 60_000;
 
 /** Settings fields that follow the account; the rest (serverUrl) stays on this device. */
 const SYNCED_SETTINGS = ['theme', 'activeStationId', 'connections', 'onboarded', 'createdAt', 'updatedAt'] as const;
 
-export type SyncStatus = 'off' | 'idle' | 'syncing' | 'offline' | 'error';
+/** 'choice': waiting for the person to say whether this device's own data joins the account (`join`) */
+export type SyncStatus = 'off' | 'idle' | 'syncing' | 'offline' | 'error' | 'choice';
+export type JoinChoice = 'add' | 'account';
+/**
+ * Told once: 'other-account': this device held another account's data, it was removed (that account keeps it);
+ * 'kept-account': a join would have replaced most of the account, so the account's version was kept.
+ */
+export type SyncNotice = 'other-account' | 'kept-account';
 export interface SyncState {
   status: SyncStatus;
+  /** status 'choice': what this device would add to the account */
+  join?: JoinAdds;
   lastSyncedAt?: number;
   rev?: number;
   error?: string;
@@ -32,7 +49,7 @@ export interface SyncState {
   songsMax?: number;
 }
 
-const events = createEmitter<{ state: SyncState }>();
+const events = createEmitter<{ state: SyncState; notice: SyncNotice }>();
 let state: SyncState = { status: 'off' };
 const setState = (patch: Partial<SyncState>) => {
   state = { ...state, ...patch };
@@ -90,7 +107,10 @@ export async function readLocalDoc(): Promise<{ doc: SyncDoc; keys: { ref: strin
 }
 
 /** Uploads keys that changed since the last upload; server transport keys then leave this device. */
-async function uploadKeys(keys: { ref: string; value: string }[]): Promise<void> {
+async function uploadKeys(all: { ref: string; value: string }[], doc: SyncDoc): Promise<void> {
+  // only keys of brains and voices the account holds (never those of records a join leaves out)
+  const refs = new Set([...doc.brains, ...doc.voices].map((r) => r.secretRef).filter(Boolean));
+  const keys = all.filter((k) => refs.has(k.ref));
   if (!keys.length) return;
   const sent = (await kvGet<Record<string, string>>(KEYS_KEY))?.value ?? {};
   for (const { ref, value } of keys) {
@@ -164,6 +184,9 @@ async function saveBase(userId: string, rev: number, doc: SyncDoc): Promise<void
     hash: docHash(doc),
   };
   await kvSet(BASE_KEY, base);
+  // this device's data now belongs to the account (and a finished join needs no answer any more)
+  await setDataOwner(userId);
+  await kvDelete(JOIN_KEY);
 }
 
 let running: Promise<void> | undefined;
@@ -174,19 +197,52 @@ let applying = false;
 async function cycle(forcePull: boolean): Promise<void> {
   const userId = api.session?.user.id;
   if (!userId || !api.available) return;
-  setState({ status: 'syncing', error: undefined });
+  // a round while the question waits keeps it on screen (nothing of this device goes anywhere before the answer)
+  setState({ status: state.status === 'choice' ? 'choice' : 'syncing', error: undefined });
   const rev = await docRound(userId, forcePull);
+  // waiting for the person's answer: nothing of this device goes to the account meanwhile, songs included
+  if (rev === undefined) return;
   const items = await syncItemsRound(userId);
-  setState({ status: 'idle', lastSyncedAt: Date.now(), rev, songsRefused: items?.refused || undefined, songsMax: items?.max });
+  setState({ status: 'idle', join: undefined, lastSyncedAt: Date.now(), rev, songsRefused: items?.refused || undefined, songsMax: items?.max });
 }
 
-/** The doc: push local changes; on conflict (or when asked) pull, merge, apply, push. Returns the server rev. */
-async function docRound(userId: string, forcePull: boolean): Promise<number> {
+/** Removes this device's account data (another account's, or the person chose to keep only their account). */
+async function clearForAccount(): Promise<void> {
+  applying = true;
+  try {
+    await clearAccountData({ keepKv: [SESSION_KEY, JOIN_KEY] });
+  } finally {
+    applying = false;
+  }
+  lastFingerprint = '';
+}
+
+const countSyncedSongs = () => db.tracks.filter(isSyncedTrack).count();
+
+async function joinChoice(userId: string): Promise<JoinChoice | undefined> {
+  const saved = (await kvGet<{ userId: string; choice: JoinChoice }>(JOIN_KEY))?.value;
+  return saved?.userId === userId ? saved.choice : undefined;
+}
+
+/**
+ * The doc: push local changes; on conflict (or when asked) pull, merge, apply, push. Returns the server rev, or
+ * undefined while the person decides whether this device's data joins the account.
+ */
+async function docRound(userId: string, forcePull: boolean): Promise<number | undefined> {
   let pull = forcePull;
+  let join: JoinMode | undefined;
   for (let attempt = 0; attempt < 4; attempt++) {
+    // data of another account never goes into this one: it leaves this device first (that account keeps it)
+    const owner = await dataOwner();
+    if (owner && owner !== userId) {
+      await clearForAccount();
+      await kvDelete(BASE_KEY);
+      await kvDelete(KEYS_KEY);
+      await resetItemState();
+      events.emit('notice', 'other-account');
+    }
     const base = await baseFor(userId);
-    const { doc: local, keys } = await readLocalDoc();
-    await uploadKeys(keys);
+    let { doc: local, keys } = await readLocalDoc();
     if (!base) pull = true;
 
     let remote: { rev: number; doc: SyncDoc | null } | undefined;
@@ -194,9 +250,32 @@ async function docRound(userId: string, forcePull: boolean): Promise<number> {
     if (remote && base && remote.rev === base.rev) remote = undefined; // nothing new on the server
     // a doc from an older app may still give hosts the built-in brain: they get none (and the clean doc is pushed back)
     const remoteDoc = remote?.doc ? migrateDocBrains(remote.doc) : null;
-    const target = remote
-      ? mergeDocs(base, local, remoteDoc)
+    const joining = !base && remoteDoc !== null;
+
+    // data that never belonged to an account meets an account with data: ask once when it holds the person's own work
+    if (joining && !owner && !join) {
+      const choice = await joinChoice(userId);
+      if (choice === 'account') {
+        await clearForAccount();
+        ({ doc: local, keys } = await readLocalDoc());
+      } else if (!choice) {
+        const plan = planJoin(local, remoteDoc, await countSyncedSongs());
+        if (plan.kind === 'ask') {
+          setState({ status: 'choice', join: plan.adds });
+          return undefined;
+        }
+      }
+    }
+
+    let target = remote
+      ? mergeDocs(base, local, remoteDoc, Date.now(), { join })
       : { ...local, deleted: { ...(base?.deleted ?? {}), ...localTombstones(base, local) } };
+    // last line of defence: a join never replaces most of an account (its records all stay; new ones still join)
+    if (joining && join !== 'account' && join !== 'add-new' && isDestructiveJoin(remoteDoc, target)) {
+      join = 'add-new';
+      target = mergeDocs(base, local, remoteDoc, Date.now(), { join });
+      events.emit('notice', 'kept-account');
+    }
     const rev = remote?.rev ?? base?.rev ?? 0;
 
     if (remote) {
@@ -207,6 +286,7 @@ async function docRound(userId: string, forcePull: boolean): Promise<number> {
         applying = false;
       }
     }
+    await uploadKeys(keys, target);
     const hash = docHash(target);
     const serverHas = remote ? remote.doc && docHash(remote.doc) === hash : base?.hash === hash;
     if (serverHas) {
@@ -214,11 +294,16 @@ async function docRound(userId: string, forcePull: boolean): Promise<number> {
       return rev;
     }
     try {
-      const res = await request<{ rev: number }>('PUT', '/api/sync', { rev, doc: target });
+      const res = await request<{ rev: number }>('PUT', '/api/sync', { rev, doc: target, ...(joining ? { join: true } : {}) });
       await saveBase(userId, res.rev, target);
       return res.rev;
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
+        // the server's own guard refused a join that would replace most of the account: keep the account's version
+        if (err.code === 'join_overwrites' && join !== 'account' && join !== 'add-new') {
+          join = 'add-new';
+          events.emit('notice', 'kept-account');
+        }
         pull = true;
         continue;
       }
@@ -311,7 +396,10 @@ export const sync = {
     await run(true);
   },
 
-  /** Stops syncing (sign out). keepBase = false forgets what was synced (another user may sign in next). */
+  /**
+   * Stops syncing. keepBase (a session that ended by itself) keeps what was synced: the data still belongs to that
+   * account. keepBase = false forgets it (the data stays here, belonging to no account).
+   */
   async stop(keepBase = false): Promise<void> {
     clearTimeout(timer);
     clearInterval(pullTimer);
@@ -328,9 +416,43 @@ export const sync = {
     if (!keepBase) {
       await kvDelete(BASE_KEY);
       await kvDelete(KEYS_KEY);
+      await kvDelete(JOIN_KEY);
       await resetItemState();
+      await setDataOwner(undefined);
     }
-    setState({ status: 'off', rev: undefined, lastSyncedAt: undefined, error: undefined, songsRefused: undefined, songsMax: undefined });
+    setState({ status: 'off', join: undefined, rev: undefined, lastSyncedAt: undefined, error: undefined, songsRefused: undefined, songsMax: undefined });
+  },
+
+  /**
+   * The answer to "Add the stations and hosts on this device to your account?": 'add' joins this device's own data
+   * (the account's records win where both have one), 'account' replaces this device's data with the account's.
+   */
+  async chooseJoin(choice: JoinChoice): Promise<void> {
+    const userId = api.session?.user.id;
+    if (!userId) return;
+    await kvSet(JOIN_KEY, { userId, choice });
+    setState({ status: 'syncing', join: undefined });
+    await run(true);
+  },
+
+  /** This device holds the account's data (it synced with it): signing out removes it. */
+  async holdsAccountData(userId: string): Promise<boolean> {
+    return (await dataOwner()) === userId || (await baseFor(userId)) !== undefined;
+  },
+
+  /**
+   * Before signing out: pushes what is still waiting. True when the account holds everything of its data here (or
+   * this device holds none of it: data that never joined the account is not the account's and stays).
+   */
+  async flush(): Promise<boolean> {
+    const userId = api.session?.user.id;
+    if (!userId || !(await sync.holdsAccountData(userId))) return true;
+    clearTimeout(timer);
+    if (api.available) await run(false);
+    const base = await baseFor(userId);
+    if (!base) return false;
+    const { doc } = await readLocalDoc();
+    return docHash({ ...doc, deleted: { ...(base.deleted ?? {}), ...localTombstones(base, doc) } }) === base.hash;
   },
 
   /** Pull + push right now. */

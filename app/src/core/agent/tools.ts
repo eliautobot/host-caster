@@ -105,17 +105,17 @@ export const TOOL_SPECS: Record<ToolName, ToolSpec> = {
 // ---- what this account can use -------------------------------------------------------------------------------------
 
 export interface ServerAgentStatus {
-  tools: { calendar: boolean; gmail: boolean; imap: boolean; notion: boolean; web: boolean; webProvider?: string; links: boolean };
+  tools: { calendar: boolean; gmail: boolean; imap: boolean; notion: boolean; web: boolean; webProvider?: string; links: boolean; notionLinked?: boolean; notionWrite?: boolean };
   caps: { lookupsPerDay: number; webSearchesPerDay: number };
   used: { lookups: number; webSearches: number };
 }
 
 let statusCache: { at: number; value?: ServerAgentStatus } = { at: 0 };
 
-/** The server's view (cached 5 minutes); undefined when signed out or unreachable. */
-export async function serverStatus(fresh = false): Promise<ServerAgentStatus | undefined> {
+/** The server's view (cached 5 minutes, or `maxAgeMs`); undefined when signed out or unreachable. */
+export async function serverStatus(fresh = false, maxAgeMs = 5 * 60_000): Promise<ServerAgentStatus | undefined> {
   if (!api.available || !api.signedIn) return undefined;
-  if (!fresh && Date.now() - statusCache.at < 5 * 60_000) return statusCache.value;
+  if (!fresh && Date.now() - statusCache.at < maxAgeMs) return statusCache.value;
   try {
     const value = await request<ServerAgentStatus>('GET', '/api/agent/status', undefined, { timeoutMs: 8000 });
     statusCache = { at: Date.now(), value };

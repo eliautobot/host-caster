@@ -238,6 +238,22 @@ Notion page ... says: ..." lines (kv `notion:context`, 10 min).
 - `loop.ts`: `runAgent({ brain, system, user, tools, ctx, maxSteps, maxCalls, deadline, answer })`: native tool calls,
   else a JSON way of asking (`{"tool": .., "args": ..}` / `{"done": ..}`), remembered per brain and model (kv
   `agent:mode:<brain>:<model>`, a JSON verdict re-checked after 14 days). Hard caps per task: steps, lookups, time.
+- `kit/` the hosts as agents (full contract: `docs/AGENT.md`): `registry.ts` (tool SOURCES, `buildToolbox(env)` every
+  turn: each tool's availability with the reason and the Settings path to fix it, the listener's per-tool policy
+  `connections.agent.policy` auto / ask / off, writes never in background turns, approvals only in listener turns),
+  `env.ts`, `policy.ts`, `selfknow.ts` (what the hosts can do now, what is off and how to turn it on, the never list,
+  the rules, in every system prompt), `sources/` (built in: the look-ups + `google_tasks` + `music_search`; app writes
+  `list_*`, `memory_*`, `play_song`, `undo_change` (kv `agent:changes`); outside writes `google_task_*`,
+  `calendar_add/update/delete`, `invite_answer`, `notion_add`; titles and notes must be the listener's words and a
+  change needs the thing named), `approval.ts` (`approve_action` / `cancel_action`: listener turn, FIRST model step
+  before any tool result, the listener's words say yes (`saysYes`), a proposal from an earlier turn), `turn.ts`
+  (`agentTurn`: one turn for the call, the chat, the on-air call-in (`radio/callinAgent.ts`) and the AI-app inbox
+  (`actions/inbox.ts`); a conversation keeps the tools it used and what its last turn could do; finished changes end
+  a turn on code's words, `also` keeps it going; `turnTrace` for the debug build), `discover.ts` (the stable core
+  sent every turn, the directory and `find_tools`: the rest load on demand in the same turn, native or JSON; the prompt
+  stays the same for the provider's cache), `effects.ts` (code's exact lines: done / failed, then the read-back),
+  `catalog.ts` (Settings, Connections, What your hosts can do). `question.ts` (pure): a question is never an order
+  (the no-AI reader, and the add / remember tools when every sentence only asks).
 - `lookups.ts`: the Lookups log. Signed in, the server's list (it logs its own lookups; the device reports the ones it
   ran with `POST /api/agent/lookups`); signed out, this device's (kv `agent:lookups`, newest 300, 400 a day).
 - `brief.ts` (pure): an item's details in a host's few words (people and answers, the video call but never its link,
@@ -348,30 +364,30 @@ confirms, the APP acts (below).
 - `commands.ts`: the listener's own words, read by code with any brain: "remind me to ... <when>", "add X to Your
   list" (`parseTrackerCommand`, times via `actions/when.ts`), "I sent the quotes" (`matchDone`, asks when two fit).
 
-`core/actions/` the fixed things the hosts can do (`types.ts`): level 1 (own space, no confirm, only from the
-listener's words, app only): `list.add`, `reminder.add`, Notion (`/api/notion/write`); level 2 (ask first, their own
-accounts, server executed): `calendar.add`, `task.add`, `task.complete`, `task.edit`; level 3 (ask first + read back
-exactly, others will see it): `invite.respond`. Nothing else exists. Switches: `connections.actions { calendar,
+`core/actions/` the fixed things the hosts can do in other accounts (`types.ts`), proposed by the agent's tools
+(`agent/kit`): level 2 (ask first, their own accounts, server executed): `calendar.add`, `calendar.update`,
+`calendar.delete`, `task.add`, `task.complete`, `task.edit`, `task.delete`, `task.move`, `notion.add` (server
+`actions/notion.js`); level 3 (ask first + read back exactly, naming who will see it): `invite.respond`, and a
+calendar change or delete Google tells guests about.
+Nothing else exists. Switches: `connections.actions { calendar,
 tasks, taskLists }` (Settings > Connections > Google, `GoogleActions.tsx`), off by default; on asks Google for the scope.
 - `when.ts` (pure): the listener's "Tuesday at 3", "tomorrow at noon for 30 minutes", "this month", "3 PM Pacific" ->
   exact zone-correct times (DST days, all-day with Google's exclusive end, late-night "tomorrow"); refuses the past
   and absurd lengths. No model: the read-back says the resolved time, so what is confirmed is what is written.
-- `understand.ts`: `mightAskToAct` (cheap gate), `neverAllowed` (payments, mail, inviting people... answered plainly),
-  then one brain step in strict JSON (12 s) with the listener's words, open invitations and Google tasks; code then
-  checks it: the title must be grounded in the listener's words (`grounded`, half the content words), the time comes
-  from `when.ts`, the invitation from `pickInvite` (organizer or title word in the words, one clear winner) and the
-  answer from `answerFromWords`. An injected title or answer is refused. Without a brain reply: `parseOffline`.
+- `understand.ts`: `answerFromWords` (the RSVP answer the listener said) and `inviteChoices`; `title.ts`:
+  `cleanTitle` (no day or time words, grounded in the listener's words: an injected title is refused).
 - `engine.ts`: `propose` (never executes), `pendingAction`, `confirmAndRun` (confirm -> token -> execute; a drop is
   retried with the same token or read back, never sent twice), `cancelAction`, `undoAction`, `actionHistory`,
   `classifyAnswer` (code, never a model: only plain yes words are yes; anything else is not).
-- `callin.ts`: `takeActionTurn` before a call-in break is written: (1) an answer to the newest waiting question (a
-  call-in only), (2) Your list commands (any brain; may offer Google Tasks too), (3) with a real brain, a proposal. The
+- `callin.ts`: `takeActionTurn`, the scripted fallback's reader (no AI brain): (1) an answer to the newest waiting
+  question (a call-in only), (2) Your list commands (may offer Google Tasks too). With an AI brain the agent decides. The
   `ActionTurn` carries a FACTS line and the exact last line of the break, written by code (`askLine` / `doneLine` /
   `failedLine`, the server's own summary), spoken by the lead host; the model only reacts around it.
-- `inbox.ts`: `nextInboxAction`: an AI-app note that asks to act counts as the listener's words (Your list right away),
-  levels 2-3 still wait for a call-in yes or a tap. An AI app never confirms.
+- `inbox.ts`: `nextInboxTurn`: an AI-app note goes through the agent (turn `ai-app`: Your list and Notion right away,
+  Google changes proposed and waiting for the listener's yes or a tap; an AI app never confirms); without AI the
+  plain reader.
 
-Flow: call-in words -> `takeActionTurn` -> `understandAction` (grounded) -> `POST /api/actions/propose` (server
+Flow: the listener's words -> `agentTurn` -> an outside-write tool (grounded) -> `POST /api/actions/propose` (server
 validates again, checks Google, writes the summary) -> the break's last line reads it back -> the listener's "yes"
 (`classifyAnswer`) or a tap on the card -> `confirm` -> one-time token -> `execute` -> Google -> the log -> "Done
 for you" with Undo. Where the rules live: Rule 1 in `tracker/safety.ts`, `tracker/extract.ts` (items only),
@@ -391,14 +407,13 @@ schemas, token, caps). Tests: `actions.test.ts`, `when.test.ts`, `injection.test
   that's it" (`phrases.isGoodbye`: short replies only, never a question), silence, or the cap (heads-up at 18 min, end
   at 20). The end is one sign-off line (7 s at most), then the music resumes where it was. Typed words (no mic, or
   "Type instead") are turns too.
-- `brain.ts`: `hostsBrain(station, 'voice' | 'text', hooks)`: per turn the same engines as a call-in, in order: "got
-  it" snoozes the last heads-up, the words go in the journal (`noteSaid`), "remember / forget that ..."
-  (`takeMemoryCommand`), a song request (`radio.requestSong`: queued next, it plays after the call), a Notion ask,
-  then `takeActionTurn` (Your list, a proposal read back by code, the listener's spoken or typed "yes" runs it). The
-  answer: `runAgent` with the call so far, the context packet (built once at the start, refreshed every 5 min:
-  calendar with people, important mail, weather, headlines, dossiers, the last break), memory cards for the words,
-  Your list, and the lookups (3 steps, 3 lookups, 16 s voice / 22 s chat). A read-back that waits for a yes skips the
-  model (a word, then code's exact line). The co-host may add one line every few turns. `learnFromWords` runs after.
+- `brain.ts`: `hostsBrain(station, 'voice' | 'text', hooks)`: per turn "got it" snoozes the last heads-up and the
+  words go in the journal (`noteSaid`); then one `agentTurn` (agent/kit) with the call so far, the context packet
+  (built once at the start, refreshed every 5 min: calendar with people, important mail, weather, headlines,
+  dossiers, the last break), memory cards for the words, Your list, the actions offered in this conversation and the
+  hosts' tools (4 steps, 5 tools, 20 s voice / 25 s chat); the effects end the reply with code's exact lines (a done
+  line, the read-back that waits for a yes). Without an AI brain: the plain reader (memory commands, song requests,
+  Notion, `takeActionTurn`). The co-host may add one line every few turns. `learnFromWords` runs after.
   No AI brain: an honest pickup ("my AI brain is off, I can take song requests and notes") and scripted answers.
 - `mouth.ts`: each reply is cut into sentences; the first is voiced and played as soon as it is ready while the next
   two are voiced behind it (the host's own voice engine, 9 s per sentence, else this device's voice). `ears.ts`: the
@@ -435,7 +450,8 @@ set = no web search offered), `AGENT_LOOKUPS_PER_DAY` (400), `AGENT_WEB_SEARCHES
 `ACTIONS_PER_DAY` (50 executions) and `ACTION_PROPOSALS_PER_DAY` (200) per account in 24 hours.
 
 Tables: `users`, `identities` (provider, subject, encrypted tokens), `sessions` (sha256 token, kind web|app,
-expires), `sync_docs` (user_id, json, rev), `sync_items` (user_id, kind, id, json or NULL = deleted, updated_at, seq)
+expires), `sync_docs` (user_id, json, rev), `sync_doc_revisions` (user_id, rev, at, size, sealed: the last
+`SYNC_DOC_REVISIONS` (20) stored docs, sealed per account and rev), `sync_items` (user_id, kind, id, json or NULL = deleted, updated_at, seq)
 and `sync_item_meta` (user_id, seq, pruned_seq), `secrets` (encrypted provider keys), `inbox` (notes/segments from AI apps),
 `connector_tokens`, `server_tracks`, `chatgpt_accounts` (per user: issued ChatGPT client id, verified subject, sealed
 tokens; the install's agent host id lives in `DATA_DIR/chatgpt-host.json`), `notion_links` (per user: workspace, sealed
@@ -460,7 +476,8 @@ Routes (JSON, errors `{ error: { code, message } }`):
   `hostcaster://auth?linkcode=` code, finished with the account's bearer session), `POST /api/auth/logout`, `GET /api/me`,
   `DELETE /api/me` (delete account and data). Web = httpOnly cookie, native = `Authorization: Bearer`.
   CSRF: cookie sessions require header `X-HostCaster: 1` on writes.
-- Sync: `GET /api/sync` -> `{ rev, doc }`, `PUT /api/sync {rev, doc}` (409 on stale rev). Doc holds hosts, stations,
+- Sync: `GET /api/sync` -> `{ rev, doc }`, `PUT /api/sync {rev, doc, join?}` (409 `conflict` on stale rev; 409
+  `join_overwrites` when a device's first push, `join: true`, would change most of the account). Doc holds hosts, stations,
   brains/voices (keys replaced by `secretRef`), profile, settings, playlists metadata (no trackIds). Songs, playlist
   lists and unplayable marks: `GET /api/sync/items?since=<seq>&limit=` -> `{ items, cursor, more, reset? }` and
   `POST /api/sync/items {items}` -> `{ before, cursor, stale, refused? }` (see "Sync" below).
@@ -558,8 +575,33 @@ local change, on focus, every 5 minutes). A round is the doc, then the items.
   playlist names, memory cards (`memories`; the server seals them at rest with the secrets key, bound to the account,
   as `memoriesSealed`, and opens them for the owner's GET; a doc from an older app without `memories` keeps them),
   and Your list (`tracker`, sealed the same way as `trackerSealed`, at most 1,500 items). Three-way merge per record (`core/api/merge.ts`): newer `updatedAt` wins, deletions travel as
-  tombstones (`deleted`, 90 days). A device joining an account that already has a doc leaves its untouched starter
-  records (`seed-*`) out, so a new browser never brings the demo station back.
+  tombstones (`deleted`, 90 days). An untouched starter record (`seed-*`, never saved since seeding or still the
+  starter content; a save that changes nothing keeps `updatedAt`) never wins over an edited one.
+- **Joining** (a device's first sync with an account, no base): the account's records, profile and settings win over
+  the device's copies (only an untouched starter of the account gives way to an edit made on the device), the
+  account's deletions hold however new the device's copy is, and the device's untouched starters stay out. An account
+  with no doc, or nothing but starters, takes everything the device has. Last line of defence: a join that would
+  change most of the account's hosts, stations, profile, settings and deletions (`joinOverwrites`, at least 3 parts) is
+  never pushed (the device keeps the account's records and adds only new ones; the server refuses one too, 409
+  `join_overwrites`, `server/src/routes/syncGuard.js`).
+- **Accounts on one device** (`core/db/account.ts`): kv `account:owner` names the account the device's data belongs to
+  (set by the first finished round). A round for another account first removes that data (`clearAccountData`, the
+  device says "Started fresh for this account"), so it never merges into the account signing in. Data that never
+  belonged to an account (local-first, a restored backup, an older app's sign-out) meets an account with data: when it
+  holds the person's own work (`planJoin`: records that are not untouched starters, a profile where the account has
+  none, songs that can sync) the round stops in status `choice` and the app asks once, "Add the stations and hosts on
+  this device to your account?" with what would be added (`ui/account/JoinQuestion.tsx`; "Not now" waits, Settings,
+  Account, Answer now): **Add them** joins (as above), **Keep only my account** removes the device's account data and
+  takes the account's. Nothing of the device (keys, songs) reaches the account before the answer. **Sign out**
+  (`auth.signOut`, `ui/account/signOut.ts`) pushes what waits (`sync.flush`; unreachable: the app asks first), ends the
+  server session, makes the desktop helper forget the ChatGPT sign-in (`POST /api/account/signed-out`), removes the
+  account's data and restarts on a clean first run. Kept as device data: tracks `local` and `device` with their
+  files and covers, kv `player:prefs`, `devicemusic:*`, `update:*`, `ui:*`, migration markers, the theme and the server
+  address. A session that ended by itself keeps the data and the base (the same account signing in again goes on
+  syncing); deleting the account keeps the data, belonging to no account. Backups never carry `account:` or `sync:`.
+- **Past versions**: the server keeps the last 20 stored docs (`sync_doc_revisions`); `restoreDocRevision` writes an
+  old one back as a new rev with every record stamped now and tombstones for what came after it, so devices that took
+  the bad copy take the restored one instead of pushing theirs back.
 - **The items** (`sync_items`, one row per record, `core/api/syncItems.ts`): `track` (a song that is a reference:
   YouTube, Spotify, a stream, a Subsonic or server library song; files never sync), `members` (a playlist's songs in
   order) and `unplayable` (a song that cannot play, so other devices skip it too). Songs are keyed `<source>:<ref>`,

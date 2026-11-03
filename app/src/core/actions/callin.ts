@@ -1,23 +1,19 @@
-// One call-in (or one message from the listener's own AI app), before the answer is written:
+// The scripted fallback's reader (no AI brain) for a call-in or a note from the listener's AI app, and the words
+// every path shares (the read-back, the done and failed lines, written by code so every brain says the same resolved
+// date and time). With an AI brain the hosts' agent decides instead (agent/kit, docs/AGENT.md).
 // 1. a proposal is waiting and they said a plain yes / no -> done (with the one-time token) / dropped;
-// 2. their words are about Your list ("remind me to ...", "I sent the quotes") -> done now (their own space);
-// 3. a real AI brain reads whether they asked the hosts to DO something -> a proposal, read back exactly.
-// The exact words about the action are written by code (the last line of the break), so every brain says the same
-// resolved date and time; the model only reacts around it.
+// 2. their words are about Your list ("remind me to ...", "I sent the quotes") -> done now (their own space).
 import { getSettings } from '../db'
 import { kvGet, kvSet } from '../db/kv'
 import { integrations } from '../api/endpoints'
 import { api } from '../api/client'
 import { cached } from '../context/cache'
-import type { Brain, CalendarEvent, EmailSummary, TrackedItem } from '../types'
+import type { CalendarEvent, TrackedItem } from '../types'
 import { addItem, allItems, markDone, openItems, updateItem } from '../tracker/store'
 import { clearListAsk, lastListAsk } from '../tracker/brief'
 import { matchDone, parseTrackerCommand } from '../tracker/commands'
 import { canAct, cancelAction, classifyAnswer, confirmAndRun, pendingAction, propose, type ProposeProblem } from './engine'
-import type { ActionRecord, ServerActionType } from './types'
-import { answerFromWords, inviteChoices, mightAskToAct, taskChoices, understandAction, type Understood } from './understand'
-import { getEmail } from '../context/sources'
-import { heldInvite, heldLine, pickHeld, type HeldInvite } from '../tracker/held'
+import type { ActionRecord, ConfirmVia, ServerActionType } from './types'
 import { spokenDate, spokenTime, wallAt, zoneNote, type WhenContext } from './when'
 
 export interface ActionTurn {
@@ -45,7 +41,8 @@ function whenCtx(now = Date.now()): WhenContext {
 const GOOGLE_TZ = 'actions:google-tz'
 const GOOGLE_TZ_TTL = 24 * 3600_000
 
-async function invites(): Promise<CalendarEvent[]> {
+/** The Google Calendar for the next two weeks (kept 10 minutes): invitations, and the listener's own events. */
+export async function invites(): Promise<CalendarEvent[]> {
   const settings = await getSettings()
   if (!settings.connections.calendar?.google || !api.available || !api.signedIn) return []
   // two weeks ahead: an invitation is often for next week (the radio's own calendar window is shorter)
@@ -109,6 +106,16 @@ export function doneLine(a: ActionRecord, calendarTz?: string): string {
       return `Done. ${title} is marked complete in Google Tasks too.`
     case 'task.edit':
       return `Done. I updated ${title} in Google Tasks.`
+    case 'task.delete':
+      return `Done. ${title} is deleted from your Google Tasks.`
+    case 'task.move':
+      return `Done. I moved ${title} to your other list.`
+    case 'calendar.update':
+      return `Done. I changed ${quoted(a.summary) ?? 'the event'} on your Google Calendar.${a.level === 3 ? ' Google told your guests.' : ''}`
+    case 'calendar.delete':
+      return `Done. ${title} is off your Google Calendar.${a.level === 3 ? ' Google told your guests.' : ''}`
+    case 'notion.add':
+      return `Done. It is on your Notion page${a.result?.pageTitle ? ` "${a.result.pageTitle}"` : ''}.`
     case 'invite.respond': {
       const r = a.payload.response
       const what = quoted(a.summary) ?? 'the meeting'
@@ -124,8 +131,10 @@ export function failedLine(a: ActionRecord | undefined): string {
   return msg ? `Sorry, that did not work: ${msg}` : 'Sorry, that did not work, so nothing changed. Try again in a minute.'
 }
 
-function problemLine(p: ProposeProblem, service: 'calendar' | 'tasks' | undefined, message?: string): string {
+export function problemLine(p: ProposeProblem, service: 'calendar' | 'tasks' | 'notion' | undefined, message?: string): string {
   const what = service === 'tasks' ? 'Hosts can use my Google Tasks' : 'Hosts can add to my calendar'
+  // Notion's own reasons (writes off, no page chosen, not connected) come back from the server in words
+  if (service === 'notion' && p !== 'offline' && p !== 'signed-out' && p !== 'limit') return message ? `I could not add that to Notion: ${message}.` : 'I could not add that to Notion just now, so nothing changed.'
   switch (p) {
     case 'off':
       return `I can do that once you turn on "${what}" in Settings, Connections, Google.`
@@ -158,7 +167,7 @@ const ITEM_FOR = 'actions:item-for'
 async function itemFor(actionId: string): Promise<string | undefined> {
   return (await kvGet<Record<string, string>>(ITEM_FOR))?.value?.[actionId]
 }
-async function linkItem(actionId: string, itemId: string): Promise<void> {
+export async function linkItem(actionId: string, itemId: string): Promise<void> {
   const cur = (await kvGet<Record<string, string>>(ITEM_FOR))?.value ?? {}
   const next = Object.fromEntries([...Object.entries(cur), [actionId, itemId]].slice(-50))
   await kvSet(ITEM_FOR, next)
@@ -224,7 +233,6 @@ async function askFor(type: ServerActionType, payload: Record<string, unknown>, 
 export interface ActionTurnInput {
   said: string
   origin: 'call-in' | 'ai-app'
-  brain?: Brain
   ref?: string
   signal?: AbortSignal
   now?: number
@@ -292,62 +300,9 @@ export async function takeActionTurn(input: ActionTurnInput): Promise<ActionTurn
     }
   }
 
-  // 3. the hosts DO something: only a real AI brain proposes (the scripted fallback never does)
-  if (!input.brain) return undefined
-  const calendar = mightAskToAct(said) ? await invites() : []
-  // an invitation Google holds (a new sender) is only in the mail: the real reason, never another way to answer it
-  const held = await heldTurn(said, calendar, now)
-  if (held) return held
-  const items = await openItems(now).catch(() => [] as TrackedItem[])
-  const r = await understandAction({ said, brain: input.brain, invites: inviteChoices(calendar, now), tasks: taskChoices(items), when: ctx, signal: input.signal })
-  if (!r.ok) {
-    switch (r.why) {
-      case 'not-allowed':
-        return { kind: 'refused', fact: `ACTION REFUSED: hosts never do ${r.message}.`, line: `Sorry, I can not help with ${r.message}. That one stays with you.` }
-      case 'need-time':
-        return { kind: 'needs', fact: 'ACTION: needs a day and time.', line: `Sure. What day and time should I put ${r.message ?? 'that'} on your calendar?` }
-      case 'past':
-        return { kind: 'needs', fact: 'ACTION: the time already passed, nothing was added.', line: 'That time has already passed, so I did not add it. What time did you mean?' }
-      case 'too-long':
-        return { kind: 'needs', fact: 'ACTION: the times did not make sense, nothing was added.', line: `${r.message ?? 'Those times do not look right.'} Can you say the start and end again?` }
-      case 'which-invite':
-        return {
-          kind: 'needs',
-          fact: 'ACTION: not sure which invitation.',
-          line: r.message ? `Which invitation do you mean: ${r.message}?` : 'I could not find that invitation on your calendar. Which one do you mean?',
-        }
-      case 'which-task':
-        return { kind: 'needs', fact: 'ACTION: not sure which task, nothing was changed.', line: 'Which one on your list do you mean? I did not change anything yet.' }
-      case 'not-grounded':
-        return { kind: 'needs', fact: 'ACTION: the name was unclear, nothing was added.', line: 'I want to get the name right. What should I call it? Nothing is added yet.' }
-      default:
-        // asked to answer an invitation the brain found nothing for: say so, never let the break promise it
-        if (answerFromWords(said) && /\b(?:invite|invitation|invited|rsvp)\b/i.test(said)) {
-          return { kind: 'needs', fact: 'ACTION: no such invitation on the calendar, nothing was answered.', line: 'I could not find that invitation on your calendar, so I did not answer anything. Which one do you mean?' }
-        }
-        return undefined
-    }
-  }
-  return proposeUnderstood(r.proposal, said, origin, input.ref)
-}
-
-/** "Accept the HC RSVP test invitation" when that invitation is held by Google in the mail (a new sender). */
-async function heldTurn(said: string, calendar: CalendarEvent[], now: number): Promise<ActionTurn | undefined> {
-  if (!/\b(?:invite|invitation|invited|rsvp|meeting|event)\b/i.test(said) && !answerFromWords(said)) return undefined
-  const settings = await getSettings()
-  const mail = settings.connections.email?.gmail ? await getEmail(settings.connections.email).catch(() => [] as EmailSummary[]) : []
-  const held = mail.map((m) => heldInvite(m, calendar)).filter((h): h is HeldInvite => Boolean(h))
-  const pick = pickHeld(said, held)
-  if (!pick) return undefined
-  // only "that invitation" and there are real ones on the calendar too: those are the ones it can answer
-  if (!pick.byWords && inviteChoices(calendar, now).length) return undefined
-  const line = heldLine(pick.held)
-  return { kind: 'held', fact: `INVITATION ONLY IN THE MAIL: ${line} Nothing was answered.`, line }
-}
-
-function proposeUnderstood(u: Understood, said: string, origin: 'call-in' | 'ai-app', ref?: string): Promise<ActionTurn> {
-  const lead = origin === 'ai-app' ? 'Your AI app asked me to do something. ' : ''
-  return askFor(u.type, u.payload as unknown as Record<string, unknown>, said, origin, ref, lead, u.type === 'task.complete' ? u.itemId : undefined)
+  // 3. anything else the hosts do is the agent's (agent/kit, docs/AGENT.md): with an AI brain the call, the chat,
+  //    the on-air call-in and the AI-app inbox run one agent turn; this reader is the scripted fallback's
+  return undefined
 }
 
 /** A tap on Done for a Google task: done here at once; a card asks before it is closed in Google Tasks too. */
@@ -361,7 +316,12 @@ export async function offerGoogleDone(item: TrackedItem): Promise<ActionRecord |
 
 /** A tap on Yes in the app: the same run as a spoken yes, with the same Your list side effects. */
 export async function confirmByTap(a: ActionRecord): Promise<ActionRecord | undefined> {
-  const final = await confirmAndRun(a, 'tap')
+  return confirmBy(a, 'tap')
+}
+
+/** The listener's yes (a tap, their words through approve_action, or "allowed without asking"): run it, then Your list. */
+export async function confirmBy(a: ActionRecord, via: ConfirmVia): Promise<ActionRecord | undefined> {
+  const final = await confirmAndRun(a, via)
   if (final?.status === 'done') await afterDone(final, await itemFor(final.id)).catch(() => undefined)
   return final
 }

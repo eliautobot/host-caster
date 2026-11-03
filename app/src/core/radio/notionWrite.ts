@@ -8,7 +8,7 @@ import { api, ApiError } from '../api/client';
 import { notion } from '../api/notion';
 import { getInbox, markInboxUsed } from '../context/sources';
 import { getSettings, kvGet, kvSet, listBreaks } from '../db';
-import type { Brain, InboxItem, Station } from '../types';
+import type { Brain, Host, InboxItem, Station } from '../types';
 import { ASK_SYSTEM, checkAsk, mightAskToWrite, parseAskOffline, spokenProblem, type NotionAsk, type NotionWrite } from './notionAsk';
 import { loadLineup } from './prepare';
 
@@ -16,9 +16,14 @@ const BRAIN_TIMEOUT_MS = 12_000;
 
 /** The station's brain for reading asks: the first host with a real model (not the scripted fallback, not an AI app). */
 export async function stationBrain(station: Station): Promise<Brain | undefined> {
+  return (await stationHost(station))?.brain;
+}
+
+/** The first host in the lineup with a real AI brain (their own, or the default one), and that brain. */
+export async function stationHost(station: Station): Promise<{ host: Host; brain: Brain } | undefined> {
   for (const host of await loadLineup(station)) {
     const brain = await resolveBrain(host.brainId).catch(() => undefined);
-    if (brain && !isFallback(brain) && brain.kind !== 'connector') return brain;
+    if (brain && !isFallback(brain) && brain.kind !== 'connector') return { host, brain };
   }
   return undefined;
 }

@@ -9,7 +9,7 @@ import { kvGet, kvSet } from '../db/kv'
 import { getSettings } from '../db'
 import { createEmitter } from '../util/emitter'
 import { actionsApi } from './api'
-import type { ActionOrigin, ActionRecord, ActionsStatus, ServerActionType } from './types'
+import type { ActionOrigin, ActionRecord, ActionsStatus, ConfirmVia, ServerActionType } from './types'
 
 export interface ActionEvents {
   /** a proposal, a confirmation, a result or an undo */
@@ -21,7 +21,7 @@ const PENDING_KEY = 'actions:pending'
 const FINAL = new Set(['done', 'failed', 'cancelled', 'expired', 'undone', 'undo_failed'])
 
 export type ProposeProblem = 'offline' | 'signed-out' | 'off' | 'reconnect' | 'invalid' | 'not-allowed' | 'limit' | 'error'
-export type ProposeResult = { ok: true; action: ActionRecord } | { ok: false; problem: ProposeProblem; message?: string; service?: 'calendar' | 'tasks' }
+export type ProposeResult = { ok: true; action: ActionRecord } | { ok: false; problem: ProposeProblem; message?: string; service?: ActionService }
 
 let statusCache: { at: number; value: ActionsStatus } | undefined
 
@@ -37,14 +37,17 @@ export async function actionsStatus(force = false): Promise<ActionsStatus | unde
   }
 }
 
-export function serviceOf(type: ServerActionType): 'calendar' | 'tasks' {
-  return type.startsWith('task.') ? 'tasks' : 'calendar'
+export type ActionService = 'calendar' | 'tasks' | 'notion'
+
+export function serviceOf(type: ServerActionType): ActionService {
+  return type.startsWith('task.') ? 'tasks' : type.startsWith('notion.') ? 'notion' : 'calendar'
 }
 
-/** The listener turned the switch on (Settings > Connections > Google) and Google granted it. */
-export async function canAct(service: 'calendar' | 'tasks'): Promise<{ ok: boolean; problem?: ProposeProblem }> {
+/** The listener turned the switch on (Settings > Connections > Google) and Google granted it. Notion: the server checks. */
+export async function canAct(service: ActionService): Promise<{ ok: boolean; problem?: ProposeProblem }> {
   if (!api.available) return { ok: false, problem: 'offline' }
   if (!api.signedIn) return { ok: false, problem: 'signed-out' }
+  if (service === 'notion') return { ok: true }
   const on = (await getSettings()).connections.actions?.[service]
   if (!on) return { ok: false, problem: 'off' }
   const st = await actionsStatus()
@@ -120,6 +123,17 @@ export async function pendingAction(now = Date.now()): Promise<ActionRecord | un
   }
 }
 
+/** Every proposal still waiting for a yes that was made before `before` (the listener heard its read-back), newest first. */
+export async function waitingActions(before: number, now = Date.now()): Promise<ActionRecord[]> {
+  if (!api.available || !api.signedIn) return []
+  try {
+    const { actions } = await actionsApi.list({ limit: 10, status: 'proposed' })
+    return actions.filter((a) => a.status === 'proposed' && a.expiresAt > now && a.createdAt < before).sort((a, b) => b.createdAt - a.createdAt)
+  } catch {
+    return []
+  }
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function waitFinal(id: string, ms = 30_000): Promise<ActionRecord | undefined> {
@@ -141,7 +155,7 @@ async function waitFinal(id: string, ms = 30_000): Promise<ActionRecord | undefi
  * The listener said yes (or tapped Yes): confirm, then execute with the one-time token. Returns the final record
  * (done or failed), or undefined when the server could not be reached at all (nothing happened).
  */
-export async function confirmAndRun(action: ActionRecord, via: 'call-in' | 'tap' | 'ai-app'): Promise<ActionRecord | undefined> {
+export async function confirmAndRun(action: ActionRecord, via: ConfirmVia): Promise<ActionRecord | undefined> {
   let token: string | undefined
   let current = action
   try {

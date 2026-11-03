@@ -1,5 +1,6 @@
 // "Remember that ..." and "forget that ..." from a call-in or the listener's AI app: honored right away (any brain,
 // even the scripted one), so the hosts can confirm it on air in a few words.
+import { isQuestionNotOrder } from '../agent/question';
 import type { MemoryCard } from '../types';
 import { addCard, allCards, deleteCards } from './store';
 import { contentWords, guessKind, toSecondPerson, withAbsoluteDate } from './text';
@@ -27,6 +28,8 @@ export function parseMemoryCommand(said: string): MemoryCommand | undefined {
   let m = s.match(REMEMBER);
   if (m) {
     const text = m[1]!.trim().replace(/[.!?\s]+$/, '').replace(/,? (please|thanks|thank you)$/i, '');
+    // "can you remember things?" asks what the hosts can do; it is not something to remember
+    if (isQuestionNotOrder(said, text)) return undefined;
     return text.length >= 3 ? { op: 'remember', text } : undefined;
   }
   m = s.match(FORGET);

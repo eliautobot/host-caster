@@ -8,7 +8,9 @@
 import { HttpError } from '../errors.js';
 
 const NAME = /^[a-zA-Z0-9_-]{1,64}$/;
-export const MAX_TOOLS = 16;
+// the hosts' tool kit offers every tool this account can use (docs/AGENT.md); providers take 128
+export const MAX_TOOLS = 64;
+const MAX_TOOLS_SIZE = 64_000;
 const MAX_CONTENT = 24_000;
 
 const bad = (msg) => new HttpError(400, 'invalid_request', msg);
@@ -23,6 +25,7 @@ export function readTools(body) {
     if (JSON.stringify(parameters).length > 4000) throw bad('a tool schema is too large');
     return { name: String(t.name), description: String(t.description ?? '').slice(0, 1000), parameters };
   });
+  if (JSON.stringify(tools).length > MAX_TOOLS_SIZE) throw bad('the tools are too large together');
   return tools.length ? tools : undefined;
 }
 

@@ -193,6 +193,13 @@ export class Player {
     this.notify(false, { dismiss: true });
   }
 
+  /** Signing out: stop and save nothing more (the account's queue leaves the device with its data; the app restarts). */
+  forget(): void {
+    clearTimeout(this.saveTimer);
+    this.persist = false;
+    this.stop();
+  }
+
   async toggle(): Promise<void> {
     if (this._state.status === 'playing') this.pause();
     else await this.play();

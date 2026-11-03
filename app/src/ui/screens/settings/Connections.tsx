@@ -7,6 +7,7 @@ import { SectionCard } from './account/parts';
 import { AiAppsSection } from './connections/AiAppsSection';
 import { CalendarFeedsSection, NewsFeedsSection } from './connections/FeedsSection';
 import { GoogleSection } from './connections/GoogleSection';
+import { HostsCanDoSection } from './connections/HostsCanDo';
 import { ImapSection } from './connections/ImapSection';
 import { NotionSection } from './connections/NotionSection';
 import './account/account.css';
@@ -55,6 +56,7 @@ export default function Connections() {
   return (
     <div className="aw-acct-stack">
       <HostsSeeLink />
+      <HostsCanDoSection />
       <GoogleSection />
       <CalendarFeedsSection />
       <ImapSection />

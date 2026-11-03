@@ -1,7 +1,7 @@
 // The server half of the actions engine (server/src/actions): propose -> confirm (one-time token bound to the exact
 // payload) -> execute -> log -> undo.
 import { request } from '../api/client'
-import type { ActionOrigin, ActionRecord, ActionsStatus, ServerActionType } from './types'
+import type { ActionOrigin, ActionRecord, ActionsStatus, ServerActionType, ConfirmVia } from './types'
 import type { GoogleTask } from '../tracker/api'
 
 export type { GoogleTask } from '../tracker/api'
@@ -12,7 +12,7 @@ export const actionsApi = {
   status: () => request<ActionsStatus>('GET', '/api/actions/status'),
   propose: (body: { type: ServerActionType; payload: Record<string, unknown>; origin: ActionOrigin; said?: string; ref?: string; tz?: string }) =>
     request<{ action: ActionRecord }>('POST', '/api/actions/propose', body, T),
-  confirm: (id: string, body: { payloadHash: string; via: 'call-in' | 'tap' | 'ai-app' }) =>
+  confirm: (id: string, body: { payloadHash: string; via: ConfirmVia }) =>
     request<{ action: ActionRecord; token?: string }>('POST', `/api/actions/${encodeURIComponent(id)}/confirm`, body, T),
   execute: (id: string, body: { token: string; payload: Record<string, unknown> }) =>
     request<{ action: ActionRecord }>('POST', `/api/actions/${encodeURIComponent(id)}/execute`, body, { timeoutMs: 45_000 }),

@@ -1,11 +1,14 @@
 // Sign-in flows (owner: server agent). Web: OAuth redirects + httpOnly cookie. Native (or a web app talking to a
 // server on another origin): system browser -> hostcaster://auth?code= deep link -> /api/auth/exchange -> bearer token
-// kept in kv. Signed out = local-only mode.
+// kept in kv. Signed out = local-only mode: signing out removes the account's data from this device (core/db/account.ts).
+import { clearAccountData } from '../db/account';
 import { kvDelete, kvGet, kvSet } from '../db/kv';
 import { isNative, onDeepLink, openAuthUrl } from '../native';
 import type { ApiSession, ApiUser, SignInProvider } from '../types';
 import { createEmitter } from '../util/emitter';
 import { api, ApiError, request } from './client';
+import { forgetHelperSignIns } from './helper';
+import { sync } from './sync';
 
 export type GoogleService = 'calendar' | 'gmail' | 'youtube' | 'calendarEvents' | 'tasks';
 type OAuthProvider = Exclude<SignInProvider, 'local'>;
@@ -255,14 +258,30 @@ export const auth = {
     if (api.session) await setSession({ ...api.session, user });
   },
 
-  async signOut(): Promise<void> {
+  /**
+   * Signs out and removes the account's data from this device (hosts, stations, brains, voices, profile, settings,
+   * Your list, memories, history, tokens; kept: song files and music folders of this device, player and device
+   * settings), leaving a clean first run; the caller restarts the app. Call sync.flush() first to push what waits.
+   * Data that never joined the account (a join still waiting for an answer) is not the account's and stays. Returns
+   * whether the account's data was removed.
+   */
+  async signOut(): Promise<boolean> {
+    const userId = api.session?.user.id;
+    const holds = userId ? await sync.holdsAccountData(userId) : false;
+    await sync.stop(true);
     if (api.available && api.session) await request('POST', '/api/auth/logout').catch(() => undefined);
+    if (holds) {
+      await forgetHelperSignIns();
+      await clearAccountData();
+    } else await sync.stop(false);
     await setSession(undefined);
+    return holds;
   },
 
-  /** Deletes the account and everything the server stores for it. Local data stays. */
+  /** Deletes the account and everything the server stores for it. Local data stays (belonging to no account). */
   async deleteAccount(): Promise<void> {
     await request('DELETE', '/api/me');
+    await sync.stop(false);
     await setSession(undefined);
   },
 

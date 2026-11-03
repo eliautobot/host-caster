@@ -382,6 +382,23 @@ export const MIGRATIONS = [
       CREATE UNIQUE INDEX actions_ref ON actions(user_id, ref) WHERE ref IS NOT NULL;
     `,
   },
+  {
+    id: 11,
+    name: 'past versions of the synced doc',
+    sql: `
+      -- The last SYNC_DOC_REVISIONS (20) versions of each account's sync doc, so a bad sync can be undone (admin
+      -- restore). sealed: the stored doc JSON, sealed with the secrets key (aad <user>:sync:rev:<rev>). size: its
+      -- length in characters. Pruned on every push; goes with the account.
+      CREATE TABLE sync_doc_revisions (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        rev INTEGER NOT NULL,
+        at INTEGER NOT NULL,
+        size INTEGER NOT NULL,
+        sealed TEXT NOT NULL,
+        PRIMARY KEY (user_id, rev)
+      );
+    `,
+  },
 ];
 
 /** Applies pending migrations in order, each in its own transaction. Returns the ids applied. */

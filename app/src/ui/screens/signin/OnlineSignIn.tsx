@@ -7,6 +7,7 @@ import { isDesktop, isNative, sellsPlans } from '@/core/native';
 import { navigate } from '@/state/router';
 import { useSession } from '@/state/session';
 import { runAction } from '../../actions';
+import { signOutAndRestart } from '../../account/signOut';
 import { Button, LogoMark, TextField, toast } from '../../components';
 import { GoogleMark, XMark } from '../settings/account/marks';
 import { BareBackdrop } from '../parts/BareBackdrop';
@@ -148,7 +149,7 @@ export function OnlineSignIn({ error: errorCode }: { error?: string }) {
             <p className="aw-bare__lead">Host-Caster accounts need a confirmed email, for your receipts and to sign in on your other devices.</p>
             <div className="aw-bare__actions">
               <EmailCode confirming onDone={goOn} />
-              <Button variant="ghost" block onClick={() => void runAction(() => auth.signOut())}>
+              <Button variant="ghost" block onClick={() => void runAction(() => signOutAndRestart())}>
                 Sign out
               </Button>
             </div>

@@ -12,6 +12,11 @@ import { headers as openaiHeaders, isOllama, stripThinking } from '../ai/openai'
 import { isDesktop } from '../native/desktop';
 import type { AgentMessage, Brain, ToolCall, ToolSpec } from '../types';
 
+/** The server took the model but not this many tools: the turn is asked the JSON way, the brain's mode is kept. */
+export class TooManyToolsError extends Error {
+  override name = 'TooManyToolsError';
+}
+
 export class ToolsUnsupportedError extends Error {
   override name = 'ToolsUnsupportedError';
 }
@@ -168,6 +173,8 @@ const viaServer = (brain: Brain) => brain.transport === 'server' || brain.kind =
 
 /** A model reached through the server that the server says takes no tools. */
 const refused = (err: unknown) => err instanceof ApiError && err.code === 'tools_unsupported';
+/** An older server that takes fewer tools than this turn offers: this turn goes the JSON way (not remembered). */
+const tooMany = (err: unknown) => err instanceof ApiError && err.status === 400 && /tools must be a list of at most|tools are too large/i.test(err.message);
 
 export async function modelStep(brain: Brain, req: StepRequest, opts: FetchOpts = {}): Promise<StepResult> {
   if (isFallback(brain) || brain.kind === 'builtin') throw new NoModelError('No AI brain');
@@ -195,6 +202,7 @@ export async function modelStep(brain: Brain, req: StepRequest, opts: FetchOpts 
     return await openaiStep(brain, req, fo);
   } catch (err) {
     if (req.tools?.length && refused(err)) throw new ToolsUnsupportedError((err as Error).message);
+    if (req.tools?.length && tooMany(err)) throw new TooManyToolsError((err as Error).message);
     throw err;
   }
 }

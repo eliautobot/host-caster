@@ -11,7 +11,8 @@ export function pickupLine(name: string | undefined, station: string, seed?: num
     [
       named(name, `Hey {name}, you're on ${station}. What's up?`, `Hey, you're on ${station}. What's up?`),
       named(name, `${station}, you're on the air with me. Hi {name}, what's going on?`, `${station}, you're on the air with me. What's going on?`),
-      named(name, `Hey {name}! Good to hear from you. What can I do for you?`, `Hey there, good to hear from you. What can I do for you?`),
+      named(name, `Hey {name}! Good to hear from you on ${station}. What can I do for you?`, `Hey there, good to hear from you on ${station}. What can I do for you?`),
+      named(name, `{name}! You're live on ${station}. What's on your mind?`, `You're live on ${station}. What's on your mind?`),
     ],
     seed,
   );

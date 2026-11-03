@@ -76,6 +76,7 @@ class LiveCall {
       const brain = await hostsBrain(station, 'voice', {
         requestSong: (said) => radio.requestSong(said),
         nowPlaying: () => summarize(radio.nowPlaying),
+        music: radio.musicHooks(),
       });
       const ears = await callEars(brain.hosts[0]?.language);
       const session = new CallSession({

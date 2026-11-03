@@ -8,6 +8,8 @@ import type { ApiIdentity, SignInProvider } from '@/core/types';
 import { navigate } from '@/state/router';
 import { useSession } from '@/state/session';
 import { runAction } from '../../actions';
+import { useJoinPrompt } from '../../account/JoinQuestion';
+import { signOutAndRestart } from '../../account/signOut';
 import { Button, TextField, toast } from '../../components';
 import { AccountAvatar } from './account/AccountAvatar';
 import { DeleteAccountButton } from './account/DeleteAccount';
@@ -36,6 +38,8 @@ function SyncLine() {
       ) : (
         <>Synced {timeAgo(s.lastSyncedAt)}</>
       );
+    case 'choice':
+      return <>Waiting for your answer: add the stations and hosts on this device to your account?</>;
     default:
       return <>Not syncing</>;
   }
@@ -181,17 +185,21 @@ function Profile() {
       )}
       <p className="aw-acct-desc">Hosts, stations, brains, voices, your profile and settings sync to every device you sign in on. Songs stay on each device.</p>
       <Actions>
-        <Button
-          icon={RefreshCw}
-          loading={syncing}
-          onClick={async () => {
-            setSyncing(true);
-            await sync.syncNow();
-            setSyncing(false);
-          }}
-        >
-          Sync now
-        </Button>
+        {syncState.status === 'choice' ? (
+          <Button onClick={() => useJoinPrompt.setState({ hidden: false })}>Answer now</Button>
+        ) : (
+          <Button
+            icon={RefreshCw}
+            loading={syncing}
+            onClick={async () => {
+              setSyncing(true);
+              await sync.syncNow();
+              setSyncing(false);
+            }}
+          >
+            Sync now
+          </Button>
+        )}
         {!editing && (
           <Button variant="ghost" onClick={() => setEditing(true)}>
             Rename
@@ -204,10 +212,26 @@ function Profile() {
 
 function Devices() {
   const [confirm, setConfirm] = useState(false);
+  const [unsynced, setUnsynced] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const signOut = async (checked: boolean) => {
+    setLeaving(true);
+    try {
+      // what waits goes to the account first; if it cannot, say so before anything leaves this device
+      if (!checked && !(await sync.flush().catch(() => false))) return setUnsynced(true);
+      await runAction(() => signOutAndRestart());
+    } finally {
+      setLeaving(false);
+    }
+  };
   return (
-    <SectionCard icon={MonitorSmartphone} title="Sign out" status="Your hosts, stations and songs stay on this device.">
+    <SectionCard
+      icon={MonitorSmartphone}
+      title="Sign out"
+      status="Your account keeps your hosts, stations and settings. Signing out removes them from this device; song files and music folders stay."
+    >
       <Actions>
-        <Button icon={LogOut} onClick={() => void runAction(() => auth.signOut(), { success: 'Signed out' })}>
+        <Button icon={LogOut} loading={leaving} onClick={() => void signOut(false)}>
           Sign out
         </Button>
         <Button variant="ghost" onClick={() => setConfirm(true)}>
@@ -224,6 +248,15 @@ function Devices() {
         onConfirm={async () => {
           if (await runAction(() => request('DELETE', '/api/me/sessions', { keepThis: true }), { success: 'Other devices signed out' })) setConfirm(false);
         }}
+      />
+      <ConfirmSheet
+        open={unsynced}
+        onClose={() => setUnsynced(false)}
+        title="Some changes are not in your account yet"
+        description="Host-Caster could not reach your account just now. Signing out removes those changes from this device. Try again when you are back online to keep them."
+        confirmLabel="Sign out anyway"
+        danger
+        onConfirm={() => signOut(true)}
       />
     </SectionCard>
   );

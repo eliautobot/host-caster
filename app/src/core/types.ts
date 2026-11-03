@@ -511,6 +511,11 @@ export interface Connections {
    * Off by default; turning one on asks Google for that permission.
    */
   actions?: { calendar?: boolean; tasks?: boolean; taskLists?: string[] };
+  /**
+   * The hosts' tools (core/agent/kit, docs/AGENT.md): policy[toolName] = 'auto' (allowed without asking), 'ask'
+   * (ask first) or 'off'; a tool missing here keeps its default.
+   */
+  agent?: { policy?: Record<string, 'auto' | 'ask' | 'off'> };
   /** Your list (core/tracker): enabled (default on), fromMail/fromEvents/fromNotion = what the hosts may track */
   tracker?: { enabled?: boolean; fromMail?: boolean; fromEvents?: boolean; fromNotion?: boolean };
   /**

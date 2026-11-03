@@ -1,0 +1,36 @@
+/* The join question (JoinQuestion.tsx) */
+.aw-join {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.aw-join__label {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.aw-join__list {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text);
+  font-size: var(--text-md);
+}
+
+.aw-join__note {
+  margin: var(--space-1) 0 0;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.aw-join__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

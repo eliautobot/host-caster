@@ -8,13 +8,29 @@ import { HttpError } from '../errors.js';
 /** level 2: ask first, only their own accounts. level 3: ask first and read back exactly, other people will see it. */
 export const TYPES = Object.freeze({
   'calendar.add': { level: 2, service: 'calendarEvents' },
+  'calendar.update': { level: 2, service: 'calendarEvents' },
+  'calendar.delete': { level: 2, service: 'calendarEvents' },
   'task.add': { level: 2, service: 'tasks' },
   'task.complete': { level: 2, service: 'tasks' },
   'task.edit': { level: 2, service: 'tasks' },
+  'task.delete': { level: 2, service: 'tasks' },
+  'task.move': { level: 2, service: 'tasks' },
   'invite.respond': { level: 3, service: 'calendarEvents' },
+  'notion.add': { level: 2, service: 'notion' },
 });
-export const ORIGINS = Object.freeze(['call-in', 'ai-app', 'app']);
-export const VIAS = Object.freeze(['call-in', 'tap', 'ai-app']);
+export const ORIGINS = Object.freeze(['call-in', 'call', 'chat', 'ai-app', 'app']);
+/**
+ * Who confirmed: the listener's own yes in a call-in, a call or the chat, a tap on Yes, or their Settings choice
+ * "allowed without asking" (auto, level 2 only). An AI app never confirms.
+ */
+export const VIAS = Object.freeze(['call-in', 'call', 'chat', 'tap', 'auto']);
+
+/** The level of a proposal: a change Google tells other people about (an event with guests) is level 3. */
+export function levelOf(type, context = {}) {
+  if (!Object.hasOwn(TYPES, type)) throw notAllowed(type);
+  if ((type === 'calendar.update' || type === 'calendar.delete') && (context.guests ?? 0) > 0) return 3;
+  return TYPES[type].level;
+}
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -27,7 +43,7 @@ export const invalid = (field, message) => new HttpError(400, 'invalid_action', 
 
 export function notAllowed(type) {
   const what = typeof type === 'string' ? type.slice(0, 40) : 'that';
-  return new HttpError(400, 'action_not_allowed', `Host-Caster cannot do "${what}". It only adds to your calendar and your Google Tasks, and answers your invitations.`);
+  return new HttpError(400, 'action_not_allowed', `Host-Caster cannot do "${what}". It only changes your own calendar events and your Google Tasks, answers your invitations and adds to the Notion page you chose.`);
 }
 
 // ---- strict field checks --------------------------------------------------------------------------------------------
@@ -136,36 +152,45 @@ function due(p, key, { nullable = false } = {}) {
   return v;
 }
 
+/** An event's time: all day (days, Google's exclusive end) or timed (stamps with offsets), checked against the clock. */
+function span(p, now) {
+  const allDay = bool(p, 'allDay');
+  if (!isTimeZone(p.timeZone)) throw invalid('timeZone', 'timeZone must be a time zone like America/New_York');
+  if (allDay) {
+    if (!isDay(p.start)) throw invalid('start', 'start must be a day like 2026-11-05');
+    if (!isDay(p.end)) throw invalid('end', 'end must be a day like 2026-11-06 (the day after the last one)');
+    const days = (dayMs(p.end) - dayMs(p.start)) / DAY;
+    if (days < 1) throw invalid('end', 'The end must be after the start');
+    if (days > 14) throw invalid('end', 'An all-day event can last at most 14 days');
+    if (now !== undefined) {
+      if (p.start < todayIn(p.timeZone, now)) throw invalid('start', 'That day has already passed');
+      if (dayMs(p.start) > now + MAX_AHEAD_MS) throw invalid('start', 'That is too far ahead');
+    }
+  } else {
+    if (!isStamp(p.start)) throw invalid('start', 'start must be a date and time with its offset, like 2026-11-03T15:00:00-05:00');
+    if (!isStamp(p.end)) throw invalid('end', 'end must be a date and time with its offset, like 2026-11-03T16:00:00-05:00');
+    const s = Date.parse(p.start);
+    const e = Date.parse(p.end);
+    if (e <= s) throw invalid('end', 'The end must be after the start');
+    if (e - s > DAY) throw invalid('end', 'An event can last at most 24 hours');
+    if (now !== undefined) {
+      if (s < now - PAST_GRACE_MS) throw invalid('start', 'That time has already passed');
+      if (s > now + MAX_AHEAD_MS) throw invalid('start', 'That is too far ahead');
+    }
+  }
+  return { allDay, start: p.start, end: p.end, timeZone: p.timeZone };
+}
+
 const SCHEMAS = {
+  'notion.add'(p) {
+    onlyKeys(p, ['kind', 'text']);
+    if (p.kind !== 'todo' && p.kind !== 'note') throw invalid('kind', 'kind must be todo or note');
+    return { kind: p.kind, text: str(p, 'text', { max: p.kind === 'todo' ? 300 : 1000, required: true, multiline: p.kind === 'note' }) };
+  },
+
   'calendar.add'(p, { now }) {
     onlyKeys(p, ['title', 'allDay', 'start', 'end', 'timeZone', 'location', 'notes']);
-    const out = { title: str(p, 'title', { max: 120, required: true }), allDay: bool(p, 'allDay') };
-    if (!isTimeZone(p.timeZone)) throw invalid('timeZone', 'timeZone must be a time zone like America/New_York');
-    if (out.allDay) {
-      if (!isDay(p.start)) throw invalid('start', 'start must be a day like 2026-11-05');
-      if (!isDay(p.end)) throw invalid('end', 'end must be a day like 2026-11-06 (the day after the last one)');
-      const days = (dayMs(p.end) - dayMs(p.start)) / DAY;
-      if (days < 1) throw invalid('end', 'The end must be after the start');
-      if (days > 14) throw invalid('end', 'An all-day event can last at most 14 days');
-      if (now !== undefined) {
-        if (p.start < todayIn(p.timeZone, now)) throw invalid('start', 'That day has already passed');
-        if (dayMs(p.start) > now + MAX_AHEAD_MS) throw invalid('start', 'That is too far ahead');
-      }
-    } else {
-      if (!isStamp(p.start)) throw invalid('start', 'start must be a date and time with its offset, like 2026-11-03T15:00:00-05:00');
-      if (!isStamp(p.end)) throw invalid('end', 'end must be a date and time with its offset, like 2026-11-03T16:00:00-05:00');
-      const s = Date.parse(p.start);
-      const e = Date.parse(p.end);
-      if (e <= s) throw invalid('end', 'The end must be after the start');
-      if (e - s > DAY) throw invalid('end', 'An event can last at most 24 hours');
-      if (now !== undefined) {
-        if (s < now - PAST_GRACE_MS) throw invalid('start', 'That time has already passed');
-        if (s > now + MAX_AHEAD_MS) throw invalid('start', 'That is too far ahead');
-      }
-    }
-    out.start = p.start;
-    out.end = p.end;
-    out.timeZone = p.timeZone;
+    const out = { title: str(p, 'title', { max: 120, required: true }), ...span(p, now) };
     const location = str(p, 'location', { max: 200 });
     const notes = str(p, 'notes', { max: 500, multiline: true });
     if (location) out.location = location;
@@ -196,6 +221,38 @@ const SCHEMAS = {
     if (p.notes !== undefined) out.notes = p.notes === null ? null : (str(p, 'notes', { max: 500, multiline: true }) ?? null);
     if (!('title' in out) && !('due' in out) && !('notes' in out)) throw invalid('title', 'Say what to change: title, due or notes');
     return out;
+  },
+
+  'task.delete'(p) {
+    onlyKeys(p, ['listId', 'taskId', 'title']);
+    return { listId: ident(p, 'listId', LIST_ID), taskId: ident(p, 'taskId', TASK_ID), title: str(p, 'title', { max: 200, required: true }) };
+  },
+
+  'task.move'(p) {
+    onlyKeys(p, ['listId', 'taskId', 'title', 'toListId']);
+    const out = { listId: ident(p, 'listId', LIST_ID), taskId: ident(p, 'taskId', TASK_ID), title: str(p, 'title', { max: 200, required: true }) };
+    out.toListId = ident(p, 'toListId', LIST_ID);
+    if (out.toListId === out.listId) throw invalid('toListId', 'The task is already in that list');
+    return out;
+  },
+
+  'calendar.update'(p, { now }) {
+    onlyKeys(p, ['calendarId', 'eventId', 'title', 'allDay', 'start', 'end', 'timeZone', 'location']);
+    const out = { calendarId: ident(p, 'calendarId', CAL_ID, { dflt: 'primary' }), eventId: ident(p, 'eventId', EVENT_ID) };
+    if (p.title !== undefined) out.title = str(p, 'title', { max: 120, required: true });
+    if (p.location !== undefined) out.location = p.location === null ? null : (str(p, 'location', { max: 200 }) ?? null);
+    const timed = ['allDay', 'start', 'end', 'timeZone'].filter((k) => p[k] !== undefined);
+    if (timed.length) {
+      if (timed.length !== 4) throw invalid(timed.includes('start') ? 'end' : 'start', 'A new time needs allDay, start, end and timeZone together');
+      Object.assign(out, span(p, now));
+    }
+    if (!('title' in out) && !('location' in out) && !('start' in out)) throw invalid('title', 'Say what to change: the title, the time or the place');
+    return out;
+  },
+
+  'calendar.delete'(p) {
+    onlyKeys(p, ['calendarId', 'eventId', 'title']);
+    return { calendarId: ident(p, 'calendarId', CAL_ID, { dflt: 'primary' }), eventId: ident(p, 'eventId', EVENT_ID), title: str(p, 'title', { max: 200, required: true }) };
   },
 
   'invite.respond'(p) {
@@ -275,6 +332,25 @@ function joinAnd(parts) {
 
 const ANSWER = { accepted: 'yes', declined: 'no', tentative: 'maybe' };
 
+/** " on Tuesday, November 3, at 3 PM" for an event Google described at propose time (context.start / startDate). */
+function eventWhen(context, now) {
+  const tz = context.tz && isTimeZone(context.tz) ? context.tz : 'UTC';
+  if (context.allDay && context.startDate) return ` on ${dueWords(context.startDate, now)}`;
+  if (Number.isFinite(context.start)) return ` on ${dayWords(context.start, tz, now)}, at ${timeWords(context.start, tz)}`;
+  return '';
+}
+
+/** Level 3: Google tells the other guests; the read-back says how many, and `others` names it for the card. */
+function guestWords(guests, what, names = []) {
+  const n = Number(guests) || 0;
+  if (n <= 0) return { line: '' };
+  const count = n === 1 ? 'your 1 guest' : `your ${n} guests`;
+  // the read-back names them: the listener says yes knowing who hears about it
+  const named = Array.isArray(names) ? names.filter((x) => typeof x === 'string' && x).slice(0, 3) : [];
+  const who = named.length ? `${count} (${joinAnd(n > named.length ? [...named, `${n - named.length} more`] : named)})` : count;
+  return { line: ` Google tells ${who} ${what}.`, others: `This tells ${who}.` };
+}
+
 /**
  * What the listener hears and sees before they confirm: `summary` (exactly what will happen) and `others` (who else
  * will see it, level 3). `context` comes from Google at propose time (the task's title now, the invitation).
@@ -285,6 +361,8 @@ export function describe(type, payload, context = {}, now = Date.now()) {
       const where = payload.location ? `, at ${payload.location}` : '';
       return { summary: `Add "${payload.title}" to your Google Calendar ${whenWords(payload, now)}${where}. No one is invited.` };
     }
+    case 'notion.add':
+      return { summary: `Add "${payload.text}" ${payload.kind === 'todo' ? 'as a to-do' : 'as a note'} to your Notion page "${context.pageTitle ?? 'Host-Caster'}".` };
     case 'task.add': {
       const list = context.listTitle ? `your "${context.listTitle}" list in Google Tasks` : 'your Google Tasks';
       return { summary: `Add "${payload.title}" to ${list}${payload.due ? `, due ${dueWords(payload.due, now)}` : ''}.` };
@@ -300,6 +378,32 @@ export function describe(type, payload, context = {}, now = Date.now()) {
       else if (payload.notes !== undefined) parts.push('replace its notes');
       const name = context.currentTitle ? `"${context.currentTitle}"` : 'the task';
       return { summary: `Change ${name} in your Google Tasks: ${joinAnd(parts)}.` };
+    }
+    case 'task.delete':
+      return { summary: `Delete "${payload.title}" from your Google Tasks.` };
+    case 'task.move': {
+      const from = context.fromTitle ? `your "${context.fromTitle}" list` : 'its list';
+      const to = context.toTitle ? `your "${context.toTitle}" list` : 'the other list';
+      return { summary: `Move "${payload.title}" from ${from} to ${to} in Google Tasks.` };
+    }
+    case 'calendar.update': {
+      const parts = [];
+      if (payload.start !== undefined) {
+        // "move it to Friday, November 6, from 3 PM to 4 PM" (never "move it to on Friday")
+        const w = whenWords(payload, now);
+        parts.push(w.startsWith('on ') ? `move it to ${w.slice(3)}` : `move it to run ${w}`);
+      }
+      if (payload.title !== undefined) parts.push(`rename it "${payload.title}"`);
+      if (payload.location === null) parts.push('remove its place');
+      else if (payload.location !== undefined) parts.push(`set the place to ${payload.location}`);
+      const once = context.recurring ? ' (only this one time, not the whole series)' : '';
+      const { line, others } = guestWords(context.guests, 'about the change', context.guestNames);
+      return { summary: `Change "${context.title || 'the event'}"${eventWhen(context, now)} on your Google Calendar${once}: ${joinAnd(parts)}.${line}`, ...(others ? { others } : {}) };
+    }
+    case 'calendar.delete': {
+      const once = context.recurring ? ' (only this one time, not the whole series)' : '';
+      const { line, others } = guestWords(context.guests, 'that it is cancelled', context.guestNames);
+      return { summary: `Delete "${payload.title}"${eventWhen(context, now)} from your Google Calendar${once}.${line}`, ...(others ? { others } : {}) };
     }
     case 'invite.respond': {
       const tz = context.tz && isTimeZone(context.tz) ? context.tz : 'UTC';

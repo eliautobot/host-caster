@@ -10,7 +10,7 @@ vi.mock('../db', () => ({
   kvGet: async (k: string) => (kv.has(k) ? { key: k, value: kv.get(k) } : undefined),
   kvSet: async (k: string, v: unknown) => void kv.set(k, v),
 }));
-vi.mock('../radio', () => ({ radio: { state: { stationId: 'st' }, requestSong: async () => undefined, nowPlaying: undefined } }));
+vi.mock('../radio', () => ({ radio: { state: { stationId: 'st' }, requestSong: async () => undefined, musicHooks: () => undefined, nowPlaying: undefined } }));
 vi.mock('../context/context', () => ({ summarize: () => undefined }));
 vi.mock('./brain', () => ({
   hostsBrain: async () => ({

@@ -155,6 +155,10 @@ describe('item sync: songs, playlist lists, unplayable marks', () => {
     await freshDevice();
     await db.tracks.put(yt('vidCCCCCCCC', { id: 'b-own-c', playCount: 3 }));
     await sync.syncNow();
+    // its own song is its own work: asked once whether it joins the account (nothing went in before the answer)
+    expect(sync.state.status).toBe('choice');
+    expect(sync.state.join?.songs).toBe(1);
+    await sync.chooseJoin('add');
     const refs = await tracksByRef();
     expect([...refs.keys()].sort()).toEqual(['vidAAAAAAAA', 'vidBBBBBBBB', 'vidCCCCCCCC']);
     expect(refs.get('vidAAAAAAAA')!.liked).toBe(true);

@@ -4,8 +4,9 @@
 import { requireUser } from '../auth/session.js';
 import { HttpError } from '../errors.js';
 import { hasGoogleScope } from '../integrations/google-auth.js';
-import { prepare, runAction, undoAction } from './google.js';
-import { ORIGINS, TYPES, VIAS, describe, isTimeZone, normalize, payloadHash } from './registry.js';
+import { prepare as prepareGoogle, runAction as runGoogle, undoAction as undoGoogle } from './google.js';
+import { prepareNotion, runNotion, undoNotion } from './notion.js';
+import { ORIGINS, TYPES, VIAS, describe, isTimeZone, levelOf, normalize, payloadHash } from './registry.js';
 import {
   cancelRow,
   claimExecution,
@@ -28,6 +29,12 @@ const REF_RE = /^[A-Za-z0-9:_.-]{1,100}$/;
 const STATUSES = ['proposed', 'confirmed', 'executing', 'done', 'failed', 'cancelled', 'expired', 'undone'];
 
 const notFound = () => new HttpError(404, 'not_found', 'No such action');
+
+// each action type's service does the work: Google (calendar, tasks, invitations) or Notion
+const isNotion = (type) => TYPES[type]?.service === 'notion';
+const prepare = (app, userId, type, payload, opts) => (isNotion(type) ? prepareNotion(app, userId, opts) : prepareGoogle(app, userId, type, payload, opts));
+const runAction = (app, userId, action) => (isNotion(action.type) ? runNotion(app, userId, action) : runGoogle(app, userId, action));
+const undoAction = (app, userId, type, undo) => (isNotion(type) ? undoNotion(app, userId, undo) : undoGoogle(app, userId, type, undo));
 
 function idOf(req) {
   const id = String(req.params.id ?? '').toLowerCase();
@@ -62,7 +69,7 @@ export async function actionRoutes(app) {
     }
     const now = Date.now();
     const payload = normalize(b.type, b.payload, { now });
-    if (!ORIGINS.includes(b.origin)) throw new HttpError(400, 'invalid_action', 'origin must be call-in, ai-app or app', { field: 'origin' });
+    if (!ORIGINS.includes(b.origin)) throw new HttpError(400, 'invalid_action', `origin must be one of ${ORIGINS.join(', ')}`, { field: 'origin' });
     const said = typeof b.said === 'string' ? b.said.slice(0, 500) : undefined;
     const tz = isTimeZone(b.tz) ? b.tz : undefined;
     // the proposals cap first (cheap), then Google (the write scope, the task or invitation as it is now)
@@ -74,7 +81,7 @@ export async function actionRoutes(app) {
     prune(app, now);
     const { row, existing } = insertProposal(app, user.id, {
       type: b.type,
-      level: TYPES[b.type].level,
+      level: levelOf(b.type, context),
       origin: b.origin,
       ref,
       payload,
@@ -121,7 +128,12 @@ export async function actionRoutes(app) {
       const user = requireUser(req);
       const id = idOf(req);
       const b = req.body ?? {};
-      if (!VIAS.includes(b.via)) throw new HttpError(400, 'invalid_request', 'via must be call-in, tap or ai-app');
+      if (!VIAS.includes(b.via)) throw new HttpError(400, 'invalid_request', `via must be one of ${VIAS.join(', ')} (an AI app never confirms)`);
+      if (b.via === 'auto') {
+        // "allowed without asking" (the listener's own Settings choice) is for level 2 only: never when others see it
+        const current = getRow(app, user.id, id);
+        if (current && current.level !== 2) throw new HttpError(400, 'invalid_request', 'Others will see this one, so it needs a yes or a tap');
+      }
       const { row, token } = confirmRow(app, user.id, id, { payloadHash: b.payloadHash, via: b.via, tokenTtlMs: caps.tokenTtlMs, perDay: caps.perDay });
       return token ? { token, action: toAction(app, row) } : { action: toAction(app, row) };
     }),
@@ -143,7 +155,7 @@ export async function actionRoutes(app) {
       }
       const row = claimExecution(app, user.id, id, { token: b.token, hash, perDay: caps.perDay });
       const secrets = secretsOf(app, row);
-      const outcome = await runAction(app, user.id, { id: row.id, type: row.type, payload: secrets.payload });
+      const outcome = await runAction(app, user.id, { id: row.id, type: row.type, origin: row.origin, payload: secrets.payload, context: secrets.context });
       return { action: toAction(app, finishExecution(app, row, outcome)) };
     }),
   );

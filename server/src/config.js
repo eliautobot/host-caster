@@ -198,6 +198,8 @@ export function loadConfig(env = process.env) {
     sessionDays: Number(env.SESSION_DAYS ?? 60),
     /** synced songs, playlist lists and unplayable marks per account (tombstones not counted) */
     syncMaxItems: Math.max(100, Number(env.SYNC_MAX_ITEMS ?? 50000) || 50000),
+    /** past versions of each account's synced doc kept for a restore (sealed, the oldest pruned) */
+    syncDocRevisions: Math.max(1, Math.floor(Number(env.SYNC_DOC_REVISIONS ?? 20)) || 20),
     /** online: songs stay on the user's devices */
     musicDir: online.enabled ? undefined : musicDirFrom(env.MUSIC_DIR),
     /** scan MUSIC_DIR when the server starts (new and changed files only) */

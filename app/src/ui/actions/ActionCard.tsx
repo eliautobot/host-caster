@@ -1,7 +1,7 @@
 // The confirmation card (Rule 2: the AI proposes, the listener confirms, the APP acts). Shows the server's summary
 // exactly, who else will see it, a live countdown, Yes / No, then the honest result. Yes = confirmByTap, No = cancel.
 import { useEffect, useState } from 'react';
-import { CalendarCheck, CalendarPlus, Check, CircleCheck, ExternalLink, ListPlus, Lock, PencilLine, Undo2, UsersRound, X, type LucideIcon } from 'lucide-react';
+import { ArrowRightLeft, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, CircleCheck, ExternalLink, ListPlus, ListX, Lock, NotebookPen, PencilLine, Undo2, UsersRound, X, type LucideIcon } from 'lucide-react';
 import { actionEvents, cancelAction, confirmByTap, doneLine, failedLine, googleZone, undoAction, zoneNote, type ActionRecord, type ServerActionType } from '@/core/actions';
 import { openExternal } from '@/core/native';
 import { useTracker } from '@/state/tracker';
@@ -14,11 +14,16 @@ const ICON: Record<ServerActionType, LucideIcon> = {
   'task.add': ListPlus,
   'task.complete': CircleCheck,
   'task.edit': PencilLine,
+  'task.delete': ListX,
+  'task.move': ArrowRightLeft,
+  'calendar.update': CalendarClock,
+  'calendar.delete': CalendarX,
   'invite.respond': CalendarCheck,
+  'notion.add': NotebookPen,
 };
 
 /** "Open in Google Calendar" / "Open in Google Tasks" */
-export const resultLinkLabel = (a: Pick<ActionRecord, 'type'>) => (a.type.startsWith('task.') ? 'Open in Google Tasks' : 'Open in Google Calendar');
+export const resultLinkLabel = (a: Pick<ActionRecord, 'type'>) => (a.type.startsWith('task.') ? 'Open in Google Tasks' : a.type.startsWith('notion.') ? 'Open in Notion' : 'Open in Google Calendar');
 
 /** Keeps a record current with every change the engine announces for it. */
 export function useLiveAction(initial: ActionRecord): [ActionRecord, (a: ActionRecord) => void] {

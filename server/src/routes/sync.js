@@ -4,10 +4,14 @@
 // to the user) and opened again for this user's GET; a doc from an older app without memories keeps the stored ones.
 // The listener's list (doc.tracker: what to do, what they wait for, from their mail and calendar) is sealed the same
 // way (doc.trackerSealed), and an older app's push without it keeps the stored list too.
+// Every stored version is kept, sealed, in sync_doc_revisions (the last SYNC_DOC_REVISIONS), so an admin can put an
+// account back the way it was (restoreDocRevision). A push that says it is a device's first one (`join`) is refused when
+// it would replace most of the account (./syncGuard.js).
 import { requireUser } from '../auth/session.js';
 import { HttpError } from '../errors.js';
 import { putSecret } from './secrets.js';
 import { withoutBuiltinBrain } from './syncDoc.js';
+import { isDestructiveJoin } from './syncGuard.js';
 import { syncItemRoutes } from './syncItems.js';
 
 const ARRAYS = ['hosts', 'stations', 'brains', 'voices', 'playlists', 'memories', 'tracker'];
@@ -22,6 +26,7 @@ const MAX_TRACKED_BYTES = 4000;
 /** sealed collections: doc[name] is stored as doc[`${name}Sealed`], bound to the user (aad `<user>:sync:<name>`) */
 const SEALED = ['memories', 'tracker'];
 const sealedAad = (userId, name) => `${userId}:sync:${name}`;
+const revisionAad = (userId, rev) => `${userId}:sync:rev:${rev}`;
 
 /** The stored doc with its memories opened (they are sealed at rest). */
 export function readDoc(app, userId) {
@@ -90,6 +95,57 @@ function validate(doc) {
   return doc;
 }
 
+// ---- past versions --------------------------------------------------------------------------------------------------
+
+/** Keeps the stored doc JSON of `rev` (sealed) and prunes beyond the newest `keep` versions. */
+function recordRevision(app, userId, rev, json, at) {
+  const keep = app.config?.syncDocRevisions ?? 20;
+  app.db
+    .prepare('INSERT OR REPLACE INTO sync_doc_revisions (user_id, rev, at, size, sealed) VALUES (?, ?, ?, ?, ?)')
+    .run(userId, rev, at, json.length, app.sealer.seal(json, revisionAad(userId, rev)));
+  app.db
+    .prepare(
+      `DELETE FROM sync_doc_revisions WHERE user_id = ? AND rev NOT IN
+         (SELECT rev FROM sync_doc_revisions WHERE user_id = ? ORDER BY rev DESC LIMIT ?)`,
+    )
+    .run(userId, userId, keep);
+}
+
+/** The account's kept versions, newest first: { rev, at, size } (never their content). */
+export function listDocRevisions(app, userId) {
+  return app.db.prepare('SELECT rev, at, size FROM sync_doc_revisions WHERE user_id = ? ORDER BY rev DESC').all(userId).map((r) => ({ ...r }));
+}
+
+/**
+ * Puts the account's doc back the way it was at `rev`, as a new version. Its records are stamped now and whatever came
+ * after it gets a tombstone, so devices that took the newer copies take the restored ones on their next sync instead of
+ * pushing theirs back. Returns { rev: the new version, restoredFrom }.
+ */
+export function restoreDocRevision(app, userId, rev, now = Date.now()) {
+  const row = app.db.prepare('SELECT sealed FROM sync_doc_revisions WHERE user_id = ? AND rev = ?').get(userId, Number(rev));
+  if (!row) throw new HttpError(404, 'not_found', 'That version is not kept');
+  const doc = openSealed(app, userId, JSON.parse(app.sealer.open(row.sealed, revisionAad(userId, Number(rev)))));
+  const current = readDoc(app, userId);
+  const deleted = { ...(doc.deleted ?? {}) };
+  for (const name of ARRAYS) {
+    const list = Array.isArray(doc[name]) ? doc[name] : [];
+    const kept = new Set(list.map((r) => r.id));
+    for (const r of current.doc?.[name] ?? []) if (!kept.has(r.id)) deleted[`${name}:${r.id}`] = now;
+    for (const id of kept) delete deleted[`${name}:${id}`];
+    doc[name] = list.map((r) => ({ ...r, updatedAt: now }));
+  }
+  if (doc.profile) doc.profile = { ...doc.profile, updatedAt: now };
+  if (doc.settings) doc.settings = { ...doc.settings, updatedAt: now };
+  doc.deleted = deleted;
+  sealCollections(app, userId, doc);
+  const json = JSON.stringify(doc);
+  const next = current.rev + 1;
+  const res = app.db.prepare('UPDATE sync_docs SET json = ?, rev = ?, updated_at = ? WHERE user_id = ? AND rev = ?').run(json, next, now, userId, current.rev);
+  if (res.changes === 0) throw new HttpError(409, 'conflict', 'The doc changed meanwhile. Try again.');
+  recordRevision(app, userId, next, json, now);
+  return { rev: next, restoredFrom: Number(rev) };
+}
+
 /** Moves any apiKey in brains/voices into the user's secrets. */
 function sealKeys(app, userId, doc) {
   for (const [key, prefix] of [
@@ -124,22 +180,36 @@ export async function syncRoutes(app) {
     const doc = withoutBuiltinBrain(sealKeys(app, user.id, validate(structuredClone(req.body?.doc))));
     const current = readDoc(app, user.id);
     for (const name of SEALED) if (doc[name] === undefined) doc[name] = current.doc?.[name] ?? [];
-    sealCollections(app, user.id, doc);
     if (baseRev !== current.rev) {
       return reply.status(409).send({ error: { code: 'conflict', message: 'The doc changed on another device' }, rev: current.rev });
     }
+    // a device's first push into an account that has data: never one that replaces most of it
+    if (req.body?.join === true && current.doc && isDestructiveJoin(current.doc, doc)) {
+      req.log.warn({ user: user.id, rev: current.rev }, 'sync: refused a join that would replace most of the account');
+      return reply.status(409).send({
+        error: { code: 'join_overwrites', message: 'This device would replace most of your account, so the account was kept as it is.' },
+        rev: current.rev,
+      });
+    }
+    sealCollections(app, user.id, doc);
     const rev = current.rev + 1;
     const t = Date.now();
+    const previous = current.rev > 0 ? app.db.prepare('SELECT json FROM sync_docs WHERE user_id = ?').get(user.id) : undefined;
+    const json = JSON.stringify(doc);
     const res = app.db
       .prepare(
         `INSERT INTO sync_docs (user_id, json, rev, updated_at) VALUES (?, ?, ?, ?)
          ON CONFLICT (user_id) DO UPDATE SET json = excluded.json, rev = excluded.rev, updated_at = excluded.updated_at
          WHERE sync_docs.rev = ?`,
       )
-      .run(user.id, JSON.stringify(doc), rev, t, current.rev);
+      .run(user.id, json, rev, t, current.rev);
     if (res.changes === 0) {
       return reply.status(409).send({ error: { code: 'conflict', message: 'The doc changed on another device' }, rev: readDoc(app, user.id).rev });
     }
+    // the version this push replaced, when it was stored before versions were kept, then this one
+    const known = app.db.prepare('SELECT 1 FROM sync_doc_revisions WHERE user_id = ? AND rev = ?');
+    if (previous && !known.get(user.id, current.rev)) recordRevision(app, user.id, current.rev, previous.json, current.updatedAt);
+    recordRevision(app, user.id, rev, json, t);
     return { rev, updatedAt: t };
   });
 }
