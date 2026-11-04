@@ -2,6 +2,7 @@
 // core/native nativeFetch (CapacitorHttp: no CORS, LAN hosts work, binary answers like TTS mp3 stay intact). In the
 // desktop app they go through its local helper (desktopFetch), which gives the same.
 import { desktopFetch, isDesktop, isNative, nativeFetch, PROXY_ERROR_HEADER } from '../native';
+import { untilAborted } from '../util/abort';
 
 export class ProviderError extends Error {
   override name = 'ProviderError';
@@ -54,7 +55,9 @@ async function send(url: string, init: RequestInit, opts: FetchOpts): Promise<Re
   let res: Response;
   try {
     const signal = mergeSignal(opts);
-    res = isNative ? await nativeFetch(url, { ...init, signal }) : isDesktop ? await desktopFetch(url, { ...init, signal }) : await fetch(url, { ...init, signal });
+    // native: CapacitorHttp gets its own connect/read timeouts (it cannot be aborted); every transport ends at the limit
+    const go = isNative ? nativeFetch(url, { ...init, signal, timeoutMs: opts.timeoutMs }) : isDesktop ? desktopFetch(url, { ...init, signal }) : fetch(url, { ...init, signal });
+    res = await untilAborted(go, signal);
   } catch (err) {
     const e = err as Error;
     if (e.name === 'TimeoutError') throw new ProviderError('The provider took too long to answer');

@@ -1,6 +1,7 @@
 // Device speech: Web Speech on web, the native TTS plugin (core/native) on Android/iOS.
 import { isNative, nativeTts } from '../native';
 import type { VoiceOption } from '../types';
+import { settleWithin } from '../util/abort';
 
 const synth = (): SpeechSynthesis | undefined => (typeof speechSynthesis !== 'undefined' ? speechSynthesis : undefined);
 
@@ -65,10 +66,19 @@ export function chunkSentences(text: string, max = 180): string[] {
 
 let cancelled = 0;
 
+/** time on top of a line's expected length before device speech counts as stuck (engines start slowly after a sleep) */
+const NATIVE_SPEECH_SLACK_MS = 8000;
+const STUCK = Symbol('stuck');
+
 /** Speaks `text` live; resolves when done (or after a safety timeout so a stuck engine never stalls the show). */
 export async function speakOnDevice(opts: { text: string; voiceId: string; rate: number; pitch: number; lang?: string }): Promise<void> {
   if (isNative) {
-    await nativeTts.speak({ text: opts.text, voiceId: opts.voiceId || undefined, language: opts.lang, rate: opts.rate, pitch: opts.pitch });
+    // an engine that never reports the line done (its service went away while the app slept) must not hold the break
+    // or every break after it: give up after the line's length with room to spare, and stop the engine
+    const said = nativeTts.speak({ text: opts.text, voiceId: opts.voiceId || undefined, language: opts.lang, rate: opts.rate, pitch: opts.pitch });
+    const words = opts.text.split(/\s+/).filter(Boolean).length;
+    const limit = (words / (2.6 * Math.max(0.5, Math.min(2, opts.rate || 1)))) * 1000 + NATIVE_SPEECH_SLACK_MS;
+    if ((await settleWithin(said, limit, STUCK)) === STUCK) await nativeTts.stop().catch(() => undefined);
     return;
   }
   const s = synth();

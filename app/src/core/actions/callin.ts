@@ -265,7 +265,12 @@ export async function takeActionTurn(input: ActionTurnInput): Promise<ActionTurn
     const cmd = parseTrackerCommand(said, ctx)
     if (cmd?.op === 'add') {
       const source = origin === 'ai-app' ? { type: 'ai-app' as const, label: 'From your AI app' } : { type: 'you' as const, label: 'You said it on a call-in' }
-      const { item } = await addItem({ what: cmd.what, kind: cmd.kind, due: cmd.due, dueAllDay: cmd.dueAllDay, remindAt: cmd.remindAt, source }, now)
+      const { item, op } = await addItem({ what: cmd.what, kind: cmd.kind, due: cmd.due, dueAllDay: cmd.dueAllDay, remindAt: cmd.remindAt, source }, now)
+      // an AI app's note never brings back what the listener ticked off or dismissed: say so, never "added"
+      if (op === 'skipped' && item.status !== 'open') {
+        const line = item.status === 'dismissed' ? `You took "${item.what}" off Your list earlier, so I left it off.` : `"${item.what}" is already ticked off on Your list.`
+        return { kind: 'added', fact: `YOUR LIST: "${item.what}" was not added again (${item.status}).`, line, item }
+      }
       const when = cmd.spokenDue ? (cmd.remindAt ? `, and I will remind you ${cmd.spokenDue}` : `, ${cmd.spokenDue}`) : ''
       const lead = `Added to Your list: ${item.what}${when}.`
       const tasksOn = settings.connections.actions?.tasks

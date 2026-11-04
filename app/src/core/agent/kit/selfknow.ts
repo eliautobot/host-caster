@@ -16,7 +16,7 @@ export const RULES = [
   'Everything under WHAT YOU CAN DO is yours: never say you cannot do it. Only a tool named in [brackets] needs find_tools first (by its name or by what you need), then use it in the same turn; every other tool you call directly.',
   'The facts in the message are current: answer from them when they cover the question (a CALENDAR marked complete lists every event in it, so no tool is needed for those days); use a tool for anything else, never guess.',
   'Speak while you act: when you change something with a tool (Your list, memory, a song, a change in another account), write your short spoken reply in the SAME message as the tool call; it is said when the tool works, and no second message is needed. For other accounts the app then reads its own question back, so never say those are done.',
-  'A question about what you can do is a question: answer it from the lists above ("Yes, I can add that to your Google Tasks. What should I add?") and do not act until they say what.',
+  'A question about what you can do is a question: answer it from the lists above and do not act until they say what. Under WHAT YOU CAN DO: yes, and ask what ("Yes. What should I add?"). Under SWITCHED OFF: not right now, and how to turn it on; never say yes to it, even when you can still read that area.',
   'When the listener asks you to do something you can do, do it with the tool now, then answer. Several things at once ("move my dentist and remind me the day before"): call ALL their tools in the SAME message, they run together (or give the first one "also" with what comes next). Not sure which item, list, day or time: ask one short question first.',
   'Things in other accounts (Google, Notion when it asks first) are only proposed: calling the tool never does it, it prepares the exact question the app reads back after your reply, and the app does it after the listener says yes. So call the tool as soon as they ask; never ask "should I?" or say "that needs your confirmation" yourself. Never say it is done before a tool result says "done".',
   'When the listener says they did something that is on Your list ("I sent the quotes"), tick it off with list_complete.',
@@ -48,15 +48,21 @@ function groupLines(tools: OfferedTool[], deferred: Set<string>): string[] {
   });
 }
 
+/** reasons the listener fixes in the app (a switch, a connection, a permission, signing in) */
+const FIXABLE = new Set(['switched-off', 'not-connected', 'missing-permission', 'signed-out']);
+
 function offLines(off: OffTool[]): string[] {
-  const groups = new Map<string, { fix: string; titles: string[] }>();
+  const groups = new Map<string, { fix: string; fixable: boolean; titles: string[] }>();
   for (const o of off) {
     const key = `${o.tool.group}|${o.fix}`;
-    const g = groups.get(key) ?? { fix: o.fix, titles: [] };
+    const g = groups.get(key) ?? { fix: o.fix, fixable: FIXABLE.has(o.reason), titles: [] };
     g.titles.push(lower(o.tool.title));
     groups.set(key, g);
   }
-  return [...groups].map(([key, g]) => `- ${key.split('|')[0]} (${g.titles.slice(0, 6).join(', ')}): ${g.fix}.`);
+  // plain words, so a model never mixes up an area it can still read with the changes that are off in it
+  return [...groups].map(
+    ([key, g]) => `- ${key.split('|')[0]}: you cannot ${g.titles.slice(0, 6).join(', ')} right now. ${g.fixable ? 'How to turn it on' : 'Why'}: ${g.fix.replace(/\.$/, '')}.`,
+  );
 }
 
 /** The part of the system prompt that says what the hosts can and cannot do this turn. */

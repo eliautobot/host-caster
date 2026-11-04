@@ -27,3 +27,49 @@ describe('request', () => {
     ]);
   });
 });
+
+describe('api.probe', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    api.configure({ baseUrl: '', session: undefined });
+  });
+
+  it('a server that did not answer is looked for again by itself (the app woke before the network was back)', async () => {
+    vi.useFakeTimers();
+    let up = false;
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      seen.push(url);
+      if (!up) throw new TypeError('Failed to fetch');
+      return new Response(JSON.stringify({ version: 't', edition: 'online' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    api.configure({ baseUrl: 'http://server.test' });
+    await api.probe();
+    expect(api.available).toBe(false);
+    up = true;
+    await vi.advanceTimersByTimeAsync(5_100);
+    expect(api.available).toBe(true);
+    expect(api.config?.version).toBe('t');
+    // once reachable, no more looking
+    const n = seen.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(seen.length).toBe(n);
+  });
+
+  it('looks again at once when the device is back online', async () => {
+    let up = false;
+    vi.stubGlobal('fetch', async () => {
+      if (!up) throw new TypeError('Failed to fetch');
+      return new Response(JSON.stringify({ version: 'u' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    const win = new EventTarget();
+    vi.stubGlobal('window', win);
+    api.configure({ baseUrl: 'http://server.test' });
+    await api.probe();
+    expect(api.available).toBe(false);
+    up = true;
+    win.dispatchEvent(new Event('online'));
+    await vi.waitFor(() => expect(api.available).toBe(true));
+  });
+});

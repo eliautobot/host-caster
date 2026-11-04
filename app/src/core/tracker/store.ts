@@ -108,7 +108,11 @@ export function byDue(a: TrackedItem, b: TrackedItem): number {
 }
 
 /** Adds an item, or merges it into the one it is the same as. Dismissed items are not brought back. */
-export function addItem(d: TrackedDraft, now = Date.now()): Promise<{ item: TrackedItem; op: AddOp }> {
+/**
+ * Adds to Your list, or merges into the same item already there (`before` = how it was, for undo). The listener asking
+ * for it again brings back what they ticked off or dismissed; mail, calendar and other outside content never does.
+ */
+export function addItem(d: TrackedDraft, now = Date.now()): Promise<{ item: TrackedItem; op: AddOp; before?: TrackedItem }> {
   return serial(async () => {
     const what = speakable(d.what, 160)
     if (!what) throw new Error('empty item')
@@ -117,7 +121,8 @@ export function addItem(d: TrackedDraft, now = Date.now()): Promise<{ item: Trac
     const items = await db.tracker.toArray()
     const twin = sameAs(items, draft, key)
     if (twin) {
-      if (twin.status === 'dismissed' || (twin.status === 'done' && d.source.type !== 'you')) return { item: twin, op: 'skipped' as AddOp }
+      const closed = twin.status === 'dismissed' || twin.status === 'done'
+      if (closed && d.source.type !== 'you') return { item: twin, op: 'skipped' as AddOp }
       const next: TrackedItem = {
         ...twin,
         // the listener's own words win; outside content only fills gaps
@@ -130,12 +135,14 @@ export function addItem(d: TrackedDraft, now = Date.now()): Promise<{ item: Trac
         gtask: twin.gtask ?? d.gtask,
         memoryId: twin.memoryId ?? d.memoryId,
         source: twin.source.link || !d.source.link ? twin.source : { ...twin.source, link: d.source.link },
-        status: twin.status === 'done' && d.source.type === 'you' ? 'open' : twin.status,
+        status: closed ? 'open' : twin.status,
+        doneAt: closed ? undefined : twin.doneAt,
+        doneBy: closed ? undefined : twin.doneBy,
         updatedAt: now,
       }
       await db.tracker.put(next)
-      trackerEvents.emit('change', { item: next })
-      return { item: next, op: 'merged' as AddOp }
+      trackerEvents.emit('change', { item: next, ...(closed ? { added: true } : {}) })
+      return { item: next, op: 'merged' as AddOp, before: twin }
     }
     const item: TrackedItem = {
       id: nanoid(12),

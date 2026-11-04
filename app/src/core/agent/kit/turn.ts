@@ -180,6 +180,20 @@ export async function latelySheet(now: number): Promise<string> {
   return `LATELY FOR THE LISTENER (newest first; only to understand "that", "it", "again" or "undo". A request that names something is a new request: do it, even when it sounds like one of these):\n${rows.map((r) => `- ${ago(now - r.at)}: ${r.line}`).join('\n')}`;
 }
 
+/** words that put off a change in another account to a confirmation the model itself never asked for with a tool */
+const PUT_OFF = /\b(?:needs?|requires?) (?:your |a )?(?:confirmation|approval|ok(?:ay)?|go-ahead|yes)\b|\bthe app (?:will|'ll|’ll) ask\b|\b(?:I'll|I’ll|I will) (?:need to )?(?:ask|check with) you (?:first|before)\b|\bbefore (?:it'?s|it’s|it is) (?:removed|deleted|added|moved|changed|cancell?ed)\b/i;
+
+/** The model's answer put off a change in another account, no proposal was made, and such a change could be made. */
+export function talkedNotProposed(text: string, effects: Effect[], box: Pick<Toolbox, 'offered'>, input: Pick<TurnInput, 'said'>): boolean {
+  if (!PUT_OFF.test(text) || effects.some((e) => e.kind === 'asked')) return false;
+  // a question from the listener ("can you delete tasks?") is answered, never acted on
+  if (/\?\s*$/.test(input.said.trim())) return false;
+  return box.offered.some((o) => o.tool.kind === 'outside-write');
+}
+
+const NOT_PROPOSED_NOTE = (said: string) =>
+  `[NOTE FROM THE APP: your answer was "${said.slice(0, 200)}" but you did not call the tool, so no question was read back and nothing can happen. Call the tool for that change NOW: it only prepares the question, the app reads it back and waits for the listener's yes. Do not ask for confirmation in your own words.]`;
+
 export async function agentTurn(input: TurnInput): Promise<TurnResult> {
   const startedAt = Date.now();
   const env = await loadEnv({ turn: input.turn, ctx: input.ctx, hasBrain: true, music: input.music });
@@ -217,22 +231,31 @@ export async function agentTurn(input: TurnInput): Promise<TurnResult> {
   };
   const system = `${input.system}\n\n${selfKnowledge(box, plan)}`;
   const changed = input.last ? changesSince(box, input.last) : '';
-  const res = await runAgent({
-    brain: input.brain,
-    system,
-    user: [changed, lately, waiting, input.user].filter(Boolean).join('\n\n'),
-    tools: [],
-    kit,
-    ctx: input.ctx,
-    maxSteps: input.maxSteps,
-    maxCalls: input.maxCalls,
-    deadline: input.deadline,
-    signal: input.signal,
-    answer: 'text',
-    maxTokens: input.maxTokens,
-    onLookup: (name) => input.onLookup?.(name),
-    stopAfter,
-  });
+  const user = [changed, lately, waiting, input.user].filter(Boolean).join('\n\n');
+  const run = (u: string) =>
+    runAgent({
+      brain: input.brain,
+      system,
+      user: u,
+      tools: [],
+      kit,
+      ctx: input.ctx,
+      maxSteps: input.maxSteps,
+      maxCalls: input.maxCalls,
+      deadline: input.deadline,
+      signal: input.signal,
+      answer: 'text',
+      maxTokens: input.maxTokens,
+      onLookup: (name) => input.onLookup?.(name),
+      stopAfter,
+    });
+  let res = await run(user);
+  // a change in another account talked about but never proposed ("deleting it needs your confirmation, the app will
+  // ask") leaves no Yes/No card, so the listener's yes does nothing: the model gets one more step to call the tool
+  if (talkedNotProposed(res.text, effects, box, input) && !input.signal?.aborted && (!input.deadline || input.deadline - Date.now() > 4000)) {
+    const again = await run(`${user}\n\n${NOT_PROPOSED_NOTE(res.text)}`);
+    res = { ...again, calls: [...res.calls, ...again.calls], steps: res.steps + again.steps, ms: res.ms + again.ms };
+  }
   // what the conversation used stays loaded for its next turns
   remember(res.calls.filter((c) => c.name !== FIND_TOOLS && box.get(c.name)).map((c) => c.name));
   // the question read back now is what the listener's next yes or no answers (all of it, nothing older)

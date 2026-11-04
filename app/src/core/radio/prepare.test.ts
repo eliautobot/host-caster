@@ -48,8 +48,10 @@ describe('prepareBreak timing', () => {
     expect(readyMs).toBeLessThan(300); // did not wait for the slow ones
     expect(b.clips[0]).toMatchObject({ kind: 'audio' });
     expect(b.clips.slice(1).every((c) => c instanceof Promise)).toBe(true);
-    // the first four requests went out together (not two at a time)
-    expect(voiced.slice(0, 4).every((v) => v.at - voiced[0]!.at < 50)).toBe(true);
+    // the first three requests went out together, the fourth only when one finished (a slot stays free on the
+    // server for a time line, a heads-up or a call sentence)
+    expect(voiced.slice(0, 3).every((v) => v.at - voiced[0]!.at < 50)).toBe(true);
+    expect(voiced[3]!.at - voiced[0]!.at).toBeGreaterThanOrEqual(40);
     const all = await Promise.all(b.clips);
     expect(all.map((c) => c.kind)).toEqual(['audio', 'audio', 'device', 'audio', 'audio']);
     expect(b.standInFor?.voice).toBe(true);

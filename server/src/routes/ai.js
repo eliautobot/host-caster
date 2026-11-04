@@ -1,6 +1,7 @@
 // POST /api/ai/chat and /api/ai/models: OpenAI-compatible chat completions and Anthropic Messages, with the key
 // from the user's secrets, and ChatGPT plan brains (chatgpt/service.js). The radio wants the whole script, so the
 // answer goes back in one piece.
+import { whenGone } from '../gone.js';
 import { requireUser } from '../auth/session.js';
 import { HttpError } from '../errors.js';
 import { jsonOf, userRequest } from '../net/http.js';
@@ -140,7 +141,7 @@ async function listModels(ctx, brain) {
 export async function aiRoutes(app) {
   const ctx = app.egressCtx;
 
-  app.post('/api/ai/chat', async (req) => {
+  app.post('/api/ai/chat', async (req, reply) => {
     const user = requireUser(req);
     const brain = resolveBrain(app, user.id, req.body);
     if (brain.kind === 'chatgpt') {
@@ -158,14 +159,18 @@ export async function aiRoutes(app) {
     if (brain.kind === 'hostcaster') {
       // online edition: Host-Caster AI, included with the plan (the server picks the model, the platform key pays)
       if (!app.included) throw new HttpError(400, 'unsupported_brain', 'Host-Caster AI is only on the Host-Caster online service');
-      return app.included.chat(user.id, {
-        system: String(req.body?.system ?? ''),
-        messages: readMessages(req.body),
-        tools: readTools(req.body),
-        json: req.body?.json === true,
-        maxTokens: Math.max(1, Math.min(2048, Number(req.body?.maxTokens ?? 600))),
-        temperature: typeof req.body?.temperature === 'number' ? req.body.temperature : undefined,
-      });
+      return app.included.chat(
+        user.id,
+        {
+          system: String(req.body?.system ?? ''),
+          messages: readMessages(req.body),
+          tools: readTools(req.body),
+          json: req.body?.json === true,
+          maxTokens: Math.max(1, Math.min(2048, Number(req.body?.maxTokens ?? 600))),
+          temperature: typeof req.body?.temperature === 'number' ? req.body.temperature : undefined,
+        },
+        { signal: whenGone(reply) },
+      );
     }
     if (brain.kind !== 'openai' && brain.kind !== 'anthropic') {
       throw new HttpError(400, 'unsupported_brain', 'This brain does not run on the server');

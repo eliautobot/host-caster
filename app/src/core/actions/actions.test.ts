@@ -270,6 +270,16 @@ describe('call-in turns: propose -> read back -> yes / no -> exactly one action'
     expect(h.state.executions).toBe(1)
     expect(h.actionsApi.execute).toHaveBeenCalledTimes(2)
   })
+  it('Your list without an AI brain: asking again brings back a dismissed item; an AI app note never does and says so', async () => {
+    const a = await addItem({ what: 'Buy AA batteries', kind: 'todo', source: { type: 'you', label: 'You said it on a call-in' } })
+    await db.tracker.update(a.item.id, { status: 'dismissed' })
+    const fromApp = await takeActionTurn({ said: 'add buy AA batteries to my list', origin: 'ai-app', now: Date.now() })
+    expect(fromApp?.line).toBe('You took "Buy AA batteries" off Your list earlier, so I left it off.')
+    expect((await db.tracker.get(a.item.id))?.status).toBe('dismissed')
+    const mine = await takeActionTurn({ said: 'add buy AA batteries to my list', origin: 'call-in', now: Date.now() })
+    expect(mine?.line).toMatch(/^Added to Your list: Buy AA batteries/)
+    expect((await db.tracker.get(a.item.id))?.status).toBe('open')
+  })
   it('"remind me to renew my license this month" -> Your list now, Google Task after yes (linked)', async () => {
     const asked = await say('remind me to renew my license this month', 'call-in', null)
     expect(asked?.kind).toBe('asked')

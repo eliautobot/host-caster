@@ -85,9 +85,14 @@ const listAdd: AgentTool = {
     const when = args.due ? dueOrRemind(str(args.due, 80), whenCtx()) : undefined;
     if (when && 'error' in when) return fail(`${when.error} Nothing was added; ask for the day.`, 'Your list (no day)');
     const kind = KINDS.includes(args.kind as TrackedKind) ? (args.kind as TrackedKind) : 'todo';
-    const { item, op } = await addItem({ what, kind, ...(when ? { due: when.due, dueAllDay: when.dueAllDay, ...(when.remindAt ? { remindAt: when.remindAt } : {}) } : {}), source: source(run) });
-    if (op === 'skipped') return { ok: true, content: { status: 'already_on_the_list', item: item.what, id: item.id }, what: 'Your list: already there' };
-    const change = await recordChange(`Added "${item.what}" to Your list`, { op: 'list-remove', id: item.id });
+    const { item, op, before } = await addItem({ what, kind, ...(when ? { due: when.due, dueAllDay: when.dueAllDay, ...(when.remindAt ? { remindAt: when.remindAt } : {}) } : {}), source: source(run) });
+    if (op === 'skipped') {
+      // only outside content (an AI app's note) is ever skipped: it never brings back what the listener closed
+      const status = item.status === 'dismissed' ? 'dismissed_before' : item.status === 'done' ? 'done_before' : 'already_on_the_list';
+      return { ok: true, content: { status, item: item.what, id: item.id }, what: 'Your list: not added again' };
+    }
+    // undo: a new item goes away; one that was there (merged, or brought back) returns to how it was
+    const change = await recordChange(`Added "${item.what}" to Your list`, before ? { op: 'list-restore', item: before } : { op: 'list-remove', id: item.id });
     const tasksOn = run.env.connections.actions?.tasks && run.env.google?.tasks !== false;
     return {
       ok: true,

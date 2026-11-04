@@ -44,6 +44,21 @@ describe('store: dedupe by source + meaning', () => {
     await addItem({ what: 'Pay the water bill', kind: 'bill', source: you }, NOW)
     expect(await db.tracker.count()).toBe(2)
   })
+  it('the listener asking again brings back what they dismissed or ticked off (it used to stay hidden while the host said "Added")', async () => {
+    const a = await addItem({ what: 'Buy AA batteries', kind: 'todo', source: you }, NOW)
+    await dismiss(a.item.id, NOW + 1000)
+    const again = await addItem({ what: 'Buy AA batteries', kind: 'todo', source: you }, NOW + 60_000)
+    expect(again.op).toBe('merged')
+    expect(again.item.id).toBe(a.item.id)
+    expect(again.item.status).toBe('open')
+    expect(again.before?.status).toBe('dismissed')
+    expect((await openItems(NOW + 60_000)).map((i) => i.what)).toContain('Buy AA batteries')
+    await markDone(a.item.id, 'you', NOW + 120_000)
+    const third = await addItem({ what: 'Buy AA batteries', kind: 'todo', source: you }, NOW + 180_000)
+    expect(third.item.status).toBe('open')
+    expect(third.item.doneAt).toBeUndefined()
+    expect(third.item.doneBy).toBeUndefined()
+  })
   it('a dismissed item is not brought back by the same mail', async () => {
     const src = { type: 'email' as const, id: 'm2', label: 'Email from Shop' }
     const a = await addItem({ what: 'Your order has shipped', kind: 'delivery', source: src }, NOW)

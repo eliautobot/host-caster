@@ -1,5 +1,6 @@
 // POST /api/tts (audio bytes) and /api/tts/voices for OpenAI, ElevenLabs and OpenAI-compatible speech servers
 // (Kokoro, Chatterbox, Qwen3-TTS, Orpheus, openedai-speech ...). Keys come from the user's secrets.
+import { whenGone } from '../gone.js';
 import { requireUser } from '../auth/session.js';
 import { HttpError } from '../errors.js';
 import { jsonOf, userRequest } from '../net/http.js';
@@ -110,7 +111,7 @@ export async function ttsRoutes(app) {
     if (voice.kind === 'hostcaster') {
       // online edition: Host-Caster Voices, included with the plan
       if (!app.included) throw new HttpError(400, 'unsupported_voice', 'Host-Caster Voices are only on the Host-Caster online service');
-      const out = await app.included.speak(user.id, speakReq);
+      const out = await app.included.speak(user.id, speakReq, { signal: whenGone(reply) });
       // the voice that spoke (a premium voice off the Premium plan speaks as its standard stand-in)
       reply.header('x-hostcaster-voice', out.voiceId);
       if (out.standIn) reply.header('x-hostcaster-stand-in', out.standIn);

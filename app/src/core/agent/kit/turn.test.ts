@@ -255,6 +255,20 @@ describe("writes are the listener's words, checked by code", () => {
     expect(await openItems()).toEqual([]);
   });
 
+  it('list_add of something they dismissed earlier brings it back, and undo puts it back the way it was (not deleted)', async () => {
+    const { addItem, dismiss, allItems } = await import('../../tracker/store');
+    const a = await addItem({ what: 'Buy AA batteries', kind: 'todo', source: { type: 'you', label: 'You said it' } });
+    await dismiss(a.item.id);
+    h.state.steps.push(tools(call('list_add', { what: 'buy AA batteries' })), say('Added.'));
+    const t = await turn('Add buy AA batteries to my list');
+    expect(t.effects[0]?.kind).toBe('changed');
+    expect((await openItems()).map((i) => i.what)).toEqual(['Buy AA batteries']);
+    h.state.steps.push(tools(call('undo_change')), say('Undone.'));
+    await turn('Undo that');
+    expect(await openItems()).toEqual([]);
+    expect((await allItems()).find((i) => i.id === a.item.id)?.status).toBe('dismissed');
+  });
+
   it('list_complete: the listener\'s own words pick the item, not the model\'s paraphrase', async () => {
     const { addItem } = await import('../../tracker/store');
     await addItem({ what: 'Send the vendor quotes to Dana', kind: 'todo', source: { type: 'you', label: 'You said it' } });
@@ -263,6 +277,31 @@ describe("writes are the listener's words, checked by code", () => {
     await turn('I sent the quotes');
     const open = (await openItems()).map((i) => i.what);
     expect(open).toEqual(['Water the plants']);
+  });
+
+  it('a change talked about but never proposed ("deleting it needs your confirmation") gets one more step that proposes it', async () => {
+    const seen: string[] = [];
+    h.state.steps.push(
+      say('I found Call the dentist. Deleting a Google task needs your confirmation; the app will ask before it is removed.'),
+      (req) => {
+        seen.push(String(req.messages.at(-1)?.content ?? ''));
+        return { text: '', toolCalls: [call('google_task_delete', { task: 'call the dentist' })] };
+      },
+      say('Okay.'),
+    );
+    const t = await turn('Dismiss the dentist task');
+    expect(t.effects.map((e) => e.kind)).toEqual(['asked']);
+    expect(seen.join(' ')).toMatch(/you did not call the tool/);
+  });
+  it('...not when the listener only asked a question, and not when a proposal was made', async () => {
+    h.state.steps.push(say('Yes, I can delete Google tasks. Deleting needs your confirmation, the app will ask first. Which one?'));
+    const q = await turn('Can you delete tasks from my Google Tasks?');
+    expect(q.effects).toEqual([]);
+    expect(h.state.steps).toHaveLength(0);
+    h.state.steps.push(tools(call('google_task_delete', { task: 'call the dentist' })), say('That needs your confirmation; the app will ask.'));
+    const t = await turn('Delete call the dentist from my tasks');
+    expect(t.effects.map((e) => e.kind)).toEqual(['asked']);
+    expect(h.state.steps).toHaveLength(0);
   });
 
   it('a chain: move a task to another list and add a reminder, in one turn', async () => {
@@ -449,7 +488,7 @@ describe('deferred tools: a small core every turn, the rest loaded with find_too
       );
       const t = await turn('can you do something about the yard?');
       expect(h.state.systems[0]).toMatch(/- Garden: [^\n]*\[load with find_tools first: garden_water\]/);
-      expect(h.state.systems[0]).toMatch(/- Garden \(turn on the garden lights\): Settings, Connections, Garden: connect the lights\./);
+      expect(h.state.systems[0]).toMatch(/- Garden: you cannot turn on the garden lights right now\. How to turn it on: Settings, Connections, Garden: connect the lights\./);
       expect(found).toMatch(/connect the lights/);
       expect(t.calls.map((c) => c.name)).toEqual(['find_tools', 'garden_water']);
       expect(t.calls[1]?.content).toMatch(/watering/);
@@ -522,7 +561,7 @@ describe('Notion writes mean the same as every outside write (allowed without as
     h.state.steps.push(say('Okay.'));
     const t = await turn('can you add things to Notion?');
     expect(t.box.get('notion_add')).toBeUndefined();
-    expect(h.state.systems[0]).toMatch(/Notion \(add to Notion\): Settings, Connections, What your hosts can do: set "Add to Notion" to "Without asking" or "Ask me first"/);
+    expect(h.state.systems[0]).toMatch(/Notion: you cannot add to Notion right now\. How to turn it on: Settings, Connections, What your hosts can do: set "Add to Notion" to "Without asking" or "Ask me first"/);
   });
 });
 

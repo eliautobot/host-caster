@@ -26,6 +26,7 @@ import { markListAired } from '../tracker/brief';
 import { nextInboxTurn } from '../actions/inbox';
 import type { FollowUp } from '../agent/followup';
 import { callInTurn } from './callinAgent';
+import { settleWithin, untilAborted } from '../util/abort';
 
 /** start writing this long before the song ends (slow local models need the head start) ... */
 const PREP_LEAD_MS = 80_000;
@@ -39,6 +40,12 @@ const LATE_AIR_MS = 20_000;
 /** a call-in on air with less than this left in the song stands in for that song's break (no second break after it) */
 const CALLIN_COVERS_MS = 60_000;
 const PREP_TIMEOUT_MS = 120_000;
+/** the steps before a break is written (an AI app's song request or note) wait at most this long */
+const INBOX_WAIT_MS = 60_000;
+/** a break on air ends after this long whatever it waits for (a normal one takes 20 to 90 s) */
+const AIR_MAX_MS = 300_000;
+/** a stopped break gets this long to tidy up before the next one may start */
+const AIR_SETTLE_MS = 3000;
 /** a call-in answer that needs a live lookup and is not ready this long after it started: a host holds the line */
 const HOLD_LINE_AFTER_MS = 2500;
 const HOLD_LINES = [
@@ -399,10 +406,11 @@ class Radio {
     const deadline = left > 0 ? Date.now() + left : undefined;
     entry.promise = (async () => {
       // a song an AI app asked for (request_song over MCP) is queued next and announced in this break
-      const request = await this.inboxRequest().catch(() => undefined);
+      const request = await this.beforeBreak(this.inboxRequest(), controller.signal);
       // an AI app asked the hosts to do something (the agent, or the plain reader without AI): Your list or Notion now,
       // anything in another account asked in this break (only the listener's yes runs it)
-      const inbox = await nextInboxTurn(station).catch(() => undefined);
+      const inbox = await this.beforeBreak(nextInboxTurn(station), controller.signal);
+      if (controller.signal.aborted) return undefined;
       const notion = inbox?.notion;
       const action = inbox?.action;
       // songs that cannot play here (checked ahead by the player) leave the queue before the host names one
@@ -421,6 +429,14 @@ class Radio {
     // right after that break (same boundary), so book it once the break is over.
     if (player.state.holding || this._state.phase === 'talking') void this.airLock.then(() => this.later(book, 0));
     else book();
+  }
+
+  /**
+   * A step before a break is written (an AI app's song request or note): it gets INBOX_WAIT_MS and ends with the
+   * break's own stop. Whatever it was waiting for, the break goes on without it rather than never coming.
+   */
+  private async beforeBreak<T>(step: Promise<T>, signal: AbortSignal): Promise<T | undefined> {
+    return settleWithin(untilAborted(step, signal), INBOX_WAIT_MS, undefined).catch(() => undefined);
   }
 
   private async hold(entry: Pending, signal: AbortSignal) {
@@ -646,13 +662,22 @@ class Radio {
     const session = this.session;
     const showPrep = kind === 'callin';
     if (showPrep) this.set({ phase: 'preparing' });
-    const timer = setTimeout(() => controller.abort(new Error('The break took too long to write')), PREP_TIMEOUT_MS);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error('The break took too long to write'));
+    }, PREP_TIMEOUT_MS);
     try {
-      const b = await prepareBreak({ station, kind, callIn, songBefore, songAfter, upcoming, request, notion, deadline, signal: controller.signal, onAir: this.onAirBreak, onLookup, memory, action, answer });
+      // the race: a break is never left waiting on work that ignores the stop (it is retried with the next song)
+      const b = await untilAborted(
+        prepareBreak({ station, kind, callIn, songBefore, songAfter, upcoming, request, notion, deadline, signal: controller.signal, onAir: this.onAirBreak, onLookup, memory, action, answer }),
+        controller.signal,
+      );
       if (session === this.session && kind !== 'callin') this.notePrep(b.tookMs);
       return session === this.session && !controller.signal.aborted ? b : undefined;
     } catch (err) {
-      if (session !== this.session || controller.signal.aborted) return undefined;
+      if (session !== this.session) return undefined;
+      if (controller.signal.aborted && !timedOut) return undefined;
       const msg = err instanceof Error ? err.message : String(err);
       console.warn('[hostcaster] break skipped:', msg);
       const code = (err as { code?: unknown }).code;
@@ -671,6 +696,8 @@ class Radio {
       await this.addHeadsUpLines(b).catch(() => undefined);
       const airing = (this.airing = new AbortController());
       signal?.addEventListener('abort', () => airing.abort(), { once: true });
+      // breaks air one at a time: one that never ends (a voice that never reports done) would hold every later break
+      const cap = setTimeout(() => airing.abort(new Error('The break ran too long')), AIR_MAX_MS);
       this.set({ phase: 'talking', script: b.lines, lineIndex: undefined, notice: undefined, noticeLink: undefined });
       // a heads-up break-in is not a break: the station's song count goes on
       if (b.plan.kind === 'callin') this.coverBreak(b);
@@ -678,8 +705,9 @@ class Radio {
       const now = Date.now();
       this.onAirSegments = b.plan.items.map((i) => i.segment);
       this.onAirBreak = { id: `on-air-${now}`, createdAt: now, updatedAt: now, stationId: b.station.id, at: now, lines: b.lines, topics: planTopicKeys(b.plan), songBefore: b.songBefore, songAfter: b.songAfter };
+      let aired: Promise<void> | undefined;
       try {
-        await airBreak(b, mode, {
+        aired = airBreak(b, mode, {
           signal: airing.signal,
           chime: opts.chime !== false,
           onLine: (line: BreakLine, i: number) => {
@@ -689,13 +717,17 @@ class Radio {
             if (i === 0) this.report(line.hostId);
           },
         });
+        await untilAborted(aired, airing.signal);
         if (session !== this.session || airing.signal.aborted) return;
         await this.record(b);
         this.journalBreak(b);
         if (b.plan.kind !== 'headsup') void maybeNotionRecap(b.station).catch(() => undefined);
       } catch (err) {
-        console.warn('[hostcaster] break failed on air', err);
+        if (!airing.signal.aborted) console.warn('[hostcaster] break failed on air', err);
+        // stopped: it tidies up (the music back to full) before the next break, but never holds it for long
+        else if (aired) await settleWithin(aired.catch(() => undefined), AIR_SETTLE_MS, undefined);
       } finally {
+        clearTimeout(cap);
         this.onAirBreak = undefined;
         if (session === this.session) {
           const notice = standInNotice(b);

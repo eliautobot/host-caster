@@ -43,11 +43,29 @@ async function inlineProvider(kind: 'brain' | 'voice', id: string, given?: Brain
   return { ...rest, secretRef };
 }
 
+/**
+ * One more try after a hiccup on the way (the connection dropped, the server or its provider had a bad moment), when
+ * the caller still waits: a host's line or reply then keeps its own voice and AI instead of the device's stand-in.
+ * Not after a time-out (the wait is used up) or a refusal that will not change.
+ */
+export async function onceMore<T>(fn: () => Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    const again = err instanceof ApiError && (err.code === 'offline' || err.status === 502 || err.status === 503 || err.status === 504);
+    if (!again || signal?.aborted) throw err;
+    await new Promise((r) => setTimeout(r, RETRY_AFTER_MS));
+    if (signal?.aborted) throw err;
+    return fn();
+  }
+}
+const RETRY_AFTER_MS = 400;
+
 export const aiProxy = {
   async chat(req: AiProxyRequest, opts: { signal?: AbortSignal; brain?: Brain } = {}) {
     needSession('this brain');
     const brain = await inlineProvider('brain', req.brainId, opts.brain);
-    return request<{ text: string; model?: string; toolCalls?: ToolCall[] }>('POST', '/api/ai/chat', { ...req, brain }, { timeoutMs: 100_000, signal: opts.signal });
+    return onceMore(() => request<{ text: string; model?: string; toolCalls?: ToolCall[] }>('POST', '/api/ai/chat', { ...req, brain }, { timeoutMs: 100_000, signal: opts.signal }), opts.signal);
   },
   async models(brainId: string, given?: Brain) {
     needSession('this brain');
@@ -63,7 +81,7 @@ export const ttsProxy = {
   ): Promise<Blob> {
     needSession('this voice');
     const voice = await inlineProvider('voice', req.voiceProviderId, opts.provider);
-    const res = await request<Response>('POST', '/api/tts', { ...req, voice }, { raw: true, timeoutMs: 100_000, signal: opts.signal });
+    const res = await onceMore(() => request<Response>('POST', '/api/tts', { ...req, voice }, { raw: true, timeoutMs: 100_000, signal: opts.signal }), opts.signal);
     return res.blob();
   },
   async voices(voiceProviderId: string, given?: VoiceProvider) {

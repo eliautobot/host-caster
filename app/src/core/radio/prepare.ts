@@ -120,8 +120,11 @@ export async function warmUpBrains(station: Station): Promise<void> {
   }
 }
 
-/** voice requests in flight per break (Host-Caster's included voices allow 4 per listener) */
-const VOICE_PARALLEL = 4;
+/**
+ * voice requests in flight per break: Host-Caster's included voices run 4 per listener at once (more wait their turn),
+ * so one stays free for a time line said again on air, a heads-up or a call sentence
+ */
+const VOICE_PARALLEL = 3;
 const BRAIN_TIMEOUT_MS = 45_000;
 const VOICE_TIMEOUT_MS = 40_000;
 /** the shortest budgets a deadline can squeeze the brain and a voice line to */
